@@ -7,3 +7,10 @@ members  = [
     "port-out-event-log",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+async-trait = "0.1"
+minicbor    = { version = "0.24", default-features = false }
+thiserror   = "2"
+tokio       = { version = "1" }
+event-model = { path = "event-model" }

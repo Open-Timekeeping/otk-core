@@ -6,5 +6,5 @@ license     = "Apache-2.0"
 description = "Shared DTOs for the OTK wire protocol: message envelope, handshake types, and protocol semantics."
 
 [dependencies]
-minicbor    = { version = "0.24", default-features = false, features = ["derive", "alloc"] }
-event-model = { path = "../event-model" }
+minicbor    = { workspace = true, features = ["derive", "alloc"] }
+event-model = { workspace = true }

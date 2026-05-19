@@ -3,7 +3,7 @@
 //! This crate defines the boundary between the OTK runtime node and its storage
 //! backends. Storage is pluggable: `timing-node` depends on this trait, not on
 //! any particular backend. For v0, the only shipped backend is
-//! `storage-segment-log`.
+//! `adapter-event-log-segment`.
 //!
 //! # What a storage backend provides
 //!
@@ -42,7 +42,7 @@
 //! # Dependencies
 //!
 //! Depends on `event-model` for [`OtkEvent`] (the top-level event envelope).
-//! No dependency on `transport-api`, `frame-codec`, or `wire-protocol`.
+//! No dependency on `port-in-ingest`, `adapter-ingest-tcp`, or `protocol`.
 //!
 //! [`DetectorAdapter::next_event`]: https://github.com/Open-Timekeeping/detector-adapter-api
 //! [`Timebase::next_event`]: https://github.com/Open-Timekeeping/timebase-api

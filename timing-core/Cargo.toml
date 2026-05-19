@@ -6,5 +6,5 @@ license     = "Apache-2.0"
 description = "Timing-domain engine for OTK. Converts raw detections into crossings."
 
 [dependencies]
-event-model = { path = "../event-model" }
+event-model = { workspace = true }
 uuid        = { version = "1", features = ["v4"] }

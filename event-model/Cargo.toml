@@ -6,4 +6,4 @@ license     = "Apache-2.0"
 description = "Canonical Open Timekeeping event types and identifiers (Event Model layer of the OTK Protocol stack)."
 
 [dependencies]
-minicbor = { version = "0.24", default-features = false, features = ["derive", "alloc"] }
+minicbor = { workspace = true, features = ["derive", "alloc"] }

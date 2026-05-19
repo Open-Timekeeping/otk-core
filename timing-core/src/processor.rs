@@ -146,17 +146,11 @@ impl CrossingProcessor {
     /// Anonymous detections (`subject_id = None`) are committed immediately.
     pub fn push_detection(&mut self, det: Detection) -> Vec<Crossing> {
         // Anonymous detections never group; commit immediately.
-        if det.subject_id.is_none() {
-            return vec![PendingGroup {
-                detections: vec![det],
-            }
-            .commit()];
-        }
+        let Some(subject_id) = det.subject_id.clone() else {
+            return vec![PendingGroup { detections: vec![det] }.commit()];
+        };
 
-        let key = (
-            det.timing_point_id.clone(),
-            det.subject_id.clone().unwrap(),
-        );
+        let key = (det.timing_point_id.clone(), subject_id);
 
         let outside_window = self
             .pending

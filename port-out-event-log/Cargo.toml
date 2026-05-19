@@ -6,8 +6,8 @@ license     = "Apache-2.0"
 description = "Outbound port contract for OTK event log persistence: the trait every storage backend implements."
 
 [dependencies]
-async-trait = "0.1"
-event-model = { path = "../event-model" }
+async-trait = { workspace = true }
+event-model = { workspace = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros"] }

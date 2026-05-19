@@ -13,10 +13,10 @@ Used by detector adapters, timing-node, timing-core, simulators, conformance fix
 ## Where this sits in the OTK Protocol stack
 
 ```text
-Event Model      -> event-model               <-- this repo
-Wire Protocol    -> wire-protocol
-Frame Codec      -> frame-codec, embedded-wire
-Transport Binding-> transport-api + transport-*
+Event Model      -> event-model               <-- this crate
+Wire Protocol    -> protocol
+Frame Codec      -> adapter-ingest-tcp (server), embedded-wire (firmware)
+Transport Binding-> port-in-ingest + adapter-* implementations
 ```
 
 The types defined here are what the OTK message envelope wraps. They have no transport assumptions; the same `Detection` is canonical whether it travels over TCP, USB CDC, or never leaves a runtime node's process at all.
@@ -44,9 +44,9 @@ The types defined here are what the OTK message envelope wraps. They have no tra
 
 ## What does not belong here
 
-- OTK message envelope and protocol-level message types, in [`wire-protocol`](../wire-protocol).
-- Encode/decode of OTK messages into byte frames, in [`frame-codec`](../frame-codec) and [`embedded-wire`](../embedded-wire).
-- Transport-specific code (sockets, USB enumeration, etc.), in [`transport-api`](../transport-api) and `transport-*` implementations.
+- OTK message envelope and protocol-level message types, in [`protocol`](../protocol).
+- Encode/decode of OTK messages into byte frames, in `adapter-ingest-tcp` (server side) and [`embedded-wire`](../embedded-wire) (firmware side).
+- Transport-specific code (sockets, USB enumeration, etc.), in [`port-in-ingest`](../port-in-ingest) and `adapter-*` implementations.
 - Trait definitions for adapters or plugins, in [`detector-adapter-api`](../detector-adapter-api), [`timebase-api`](../timebase-api), [`plugin-api`](../plugin-api).
 - Producer-side connection / retry helpers, in [`otk-ingest-client`](../otk-ingest-client).
 - Application-layer DTOs for apps and external consumers, in [`api-model`](../api-model).
@@ -56,7 +56,7 @@ The types defined here are what the OTK message envelope wraps. They have no tra
 
 **Depends on:** [`spec`](../spec) for terminology.
 
-**Commonly depended on by:** [`wire-protocol`](../wire-protocol), [`frame-codec`](../frame-codec), [`embedded-wire`](../embedded-wire), [`detector-adapter-api`](../detector-adapter-api), [`detector-adapter-common`](../detector-adapter-common), [`timebase-api`](../timebase-api), [`otk-ingest-client`](../otk-ingest-client), [`plugin-api`](../plugin-api), [`timing-core`](../timing-core), [`timing-node`](../timing-node), every adapter, the simulator, conformance.
+**Commonly depended on by:** [`protocol`](../protocol), [`embedded-wire`](../embedded-wire), [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk), [`timebase-api`](../timebase-api), [`plugin-api`](../plugin-api), [`timing-core`](../timing-core), [`timing-node`](https://github.com/Open-Timekeeping/timing-node), every adapter, the simulator, conformance.
 
 For local Rust development, sibling crates depend via `event-model = { path = "../event-model" }`.
 

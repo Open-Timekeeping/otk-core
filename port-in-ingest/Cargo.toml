@@ -6,9 +6,9 @@ license     = "Apache-2.0"
 description = "Inbound port contract for OTK event ingestion: the typed boundary between the timing node and its transport adapters."
 
 [dependencies]
-async-trait = "0.1"
-thiserror   = "2"
-event-model = { path = "../event-model" }
+async-trait = { workspace = true }
+thiserror   = { workspace = true }
+event-model = { workspace = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros"] }
