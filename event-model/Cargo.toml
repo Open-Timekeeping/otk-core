@@ -1,0 +1,9 @@
+[package]
+name        = "event-model"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Canonical Open Timekeeping event types and identifiers (Event Model layer of the OTK Protocol stack)."
+
+[dependencies]
+minicbor = { workspace = true, features = ["derive", "alloc"] }
