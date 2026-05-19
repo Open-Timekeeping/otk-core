@@ -1,5 +1,3 @@
-extern crate alloc;
-
 use alloc::vec::Vec;
 use event_model::ids::StreamId;
 use minicbor::{Decode, Encode};
