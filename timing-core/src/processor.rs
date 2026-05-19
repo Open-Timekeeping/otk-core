@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-use event_model::{Detection, SensorData};
+use event_model::{Detection, SensorData, SubjectId, TimingPointId};
 
 use crate::config::ProcessorConfig;
 use crate::crossing::{Crossing, CrossingId};
 
-// Grouping key: (timing_point_id, subject_id as string).
-type GroupKey = (String, String);
+type GroupKey = (TimingPointId, SubjectId);
 
 struct PendingGroup {
     detections: Vec<Detection>,
@@ -155,8 +154,8 @@ impl CrossingProcessor {
         }
 
         let key = (
-            det.timing_point_id.as_str().to_string(),
-            det.subject_id.as_ref().unwrap().as_str().to_string(),
+            det.timing_point_id.clone(),
+            det.subject_id.clone().unwrap(),
         );
 
         let outside_window = self

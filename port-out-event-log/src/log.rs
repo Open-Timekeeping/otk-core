@@ -8,10 +8,10 @@ use crate::offset::Offset;
 /// A live subscription to the event log.
 ///
 /// Created by [`EventLog::subscribe`]. Poll [`next_entry`] until it returns
-/// `None` (subscription closed) or `Some(Err(_))` (terminal error). Both
-/// states end the subscription; call [`close`] after either. Call [`close`]
-/// to end the subscription eagerly; the backend may release internal resources
-/// before `next_entry` would return `None` on its own.
+/// `None` (subscription closed) or `Some(Err(_))` (terminal error); both
+/// states are terminal. After receiving either, call [`close`] so the backend
+/// can release internal resources. To terminate before a natural end state,
+/// call [`close`] eagerly instead of waiting for `next_entry` to return `None`.
 ///
 /// [`next_entry`]: LogSubscription::next_entry
 /// [`close`]: LogSubscription::close
