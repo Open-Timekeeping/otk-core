@@ -1,0 +1,14 @@
+[package]
+name        = "port-in-ingest"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Inbound port contract for OTK event ingestion: the typed boundary between the timing node and its transport adapters."
+
+[dependencies]
+async-trait = "0.1"
+thiserror   = "2"
+event-model = { path = "../event-model" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }

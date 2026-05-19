@@ -1,0 +1,13 @@
+[package]
+name        = "port-out-event-log"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Outbound port contract for OTK event log persistence: the trait every storage backend implements."
+
+[dependencies]
+async-trait = "0.1"
+event-model = { path = "../event-model" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }

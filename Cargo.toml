@@ -1,0 +1,9 @@
+[workspace]
+members  = [
+    "event-model",
+    "protocol",
+    "timing-core",
+    "port-in-ingest",
+    "port-out-event-log",
+]
+resolver = "2"
