@@ -13,6 +13,7 @@ use crate::timestamp::{SourceAttestation, TimestampingMethod};
 /// Sensor-specific metadata lives in the `sensor` field. Only fields relevant to the
 /// sensor type are populated; no spurious nullables appear in the common fields.
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Detection {
     #[n(0)]
     pub detection_id: DetectionId,
@@ -68,6 +69,7 @@ pub struct Detection {
 /// Sensor-specific metadata for a `Detection`. Each variant carries exactly the fields
 /// that make sense for that sensor type; no variant imposes nullables on another.
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SensorData {
     /// Inductive loop with active transponder. Common in karting, motorsport, cycling.
     #[n(0)]

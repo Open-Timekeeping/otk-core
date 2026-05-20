@@ -6,7 +6,9 @@ macro_rules! string_id {
     ($(#[$attr:meta])* $name:ident) => {
         $(#[$attr])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Encode, Decode)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[cbor(transparent)]
+        #[cfg_attr(feature = "serde", serde(transparent))]
         pub struct $name(#[n(0)] String);
 
         impl $name {
@@ -62,6 +64,11 @@ string_id!(
 string_id!(
     /// Uniquely identifies a single Detection event.
     DetectionId
+);
+
+string_id!(
+    /// Uniquely identifies a single Crossing event.
+    CrossingId
 );
 
 string_id!(

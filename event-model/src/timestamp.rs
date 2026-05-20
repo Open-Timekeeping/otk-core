@@ -3,6 +3,7 @@ use minicbor::{Decode, Encode};
 /// How a timestamp was produced. Honest reporting is required; the consumer decides
 /// whether a given method meets their precision requirements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TimestampingMethod {
     /// Timer peripheral captured the signal edge in silicon, independent of CPU activity.
     /// Highest trust; jitter bounded by the timer clock, not interrupt latency.
@@ -30,6 +31,7 @@ pub enum TimestampingMethod {
 
 /// How the timebase identity carried in an event was determined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SourceAttestation {
     /// Identity was read from the sync source at runtime (PTP grandmaster Clock-ID,
     /// GNSS constellation, NTP refid chain). Hardware-grounded.
@@ -44,6 +46,7 @@ pub enum SourceAttestation {
 
 /// Sync state of a timebase at a point in time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SyncState {
     /// Actively disciplined against the reference; within normal uncertainty bounds.
     #[n(0)]
