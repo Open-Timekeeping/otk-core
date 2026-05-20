@@ -94,6 +94,16 @@ impl SerialFrameDecoder {
                             results.push(Err(FrameError::CorruptFrame));
                             continue;
                         }
+                        // max_wire_size is a worst-case COBS bound; a payload heavy with
+                        // zero bytes can encode shorter than that bound even when the raw
+                        // payload exceeds max_frame_size. Check explicitly after decode.
+                        if payload.len() > self.max_frame_size {
+                            results.push(Err(FrameError::OversizeFrame {
+                                len: Some(payload.len()),
+                                max: self.max_frame_size,
+                            }));
+                            continue;
+                        }
                         match minicbor::decode::<OtkEnvelope>(payload) {
                             Ok(envelope) => results.push(Ok(envelope)),
                             Err(e) => results.push(Err(FrameError::DecodeFailed(e))),
@@ -265,6 +275,54 @@ mod tests {
             minicbor::to_vec(&envelope).unwrap(),
             minicbor::to_vec(decoded).unwrap(),
             "decoded envelope after resync must match original"
+        );
+    }
+
+    #[test]
+    fn serial_post_decode_oversize_rejected() {
+        // max_wire_size is derived from cobs::max_encoding_length(max_frame_size + 2), which
+        // is a worst-case (maximum overhead) bound. A payload heavy with zero bytes can
+        // COBS-encode shorter than that bound even when raw payload.len() > max_frame_size,
+        // slipping past the wire-size guard. The explicit post-decode size check must catch it.
+        //
+        // max_encoding_length(N) = N + ceil(N/254) (worst case: all non-zero input).
+        // All-zero input encodes more compactly: each 0x00 maps to a 0x01 code byte (1:1),
+        // while the appended non-zero CRC bytes add only 1 code byte for both. The gap opens
+        // when ceil((max_frame_size+3)/254) > ceil((max_frame_size+2)/254), i.e. max_frame_size > 506.
+        //
+        // Concrete case (max_frame_size = 507):
+        //   max_wire_size = max_encoding_length(509) = 509 + ceil(509/254) = 509 + 3 = 512
+        //   Oversized payload: 508 all-zero bytes (1 over the limit)
+        //   with_crc: 510 bytes (508 zeros + 2 non-zero CRC bytes)
+        //   Actual COBS: 508 code bytes (0x01) + 1 code byte + 2 data bytes = 511 < 512 ✓
+        let max_frame_size = 507usize;
+        let mut dec = SerialFrameDecoder::new(max_frame_size);
+
+        let raw_payload = alloc::vec![0u8; max_frame_size + 1]; // 508 bytes, 1 over limit
+        let crc = crc16_ccitt_false(&raw_payload).to_be_bytes();
+        let mut with_crc = raw_payload.clone();
+        with_crc.extend_from_slice(&crc); // 510 bytes total (508 zeros + 2 non-zero CRC)
+
+        let max_encoded = cobs::max_encoding_length(with_crc.len());
+        let mut encoded = alloc::vec![0u8; max_encoded];
+        let encoded_len = cobs::encode(&with_crc, &mut encoded);
+        encoded.truncate(encoded_len);
+
+        // Verify the test prerequisite: encoded frame fits inside max_wire_size.
+        let max_wire_size = cobs::max_encoding_length(max_frame_size + 2);
+        assert!(
+            encoded_len < max_wire_size,
+            "prerequisite failed: encoded_len={encoded_len} must be < max_wire_size={max_wire_size}"
+        );
+
+        encoded.push(0x00); // frame delimiter
+
+        let results = dec.push(&encoded);
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(results[0], Err(FrameError::OversizeFrame { len: Some(l), max: m })
+                if l == max_frame_size + 1 && m == max_frame_size),
+            "expected OversizeFrame, got {:?}", results[0]
         );
     }
 }
