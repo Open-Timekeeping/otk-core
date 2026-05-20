@@ -5,11 +5,13 @@ members  = [
     "timing-core",
     "port-in-ingest",
     "port-out-event-log",
+    "frame-codec",
 ]
 resolver = "2"
 
 [workspace.dependencies]
 async-trait = "0.1"
+cobs        = "0.2"
 minicbor    = { version = "0.24", default-features = false }
 thiserror   = "2"
 tokio       = { version = "1" }

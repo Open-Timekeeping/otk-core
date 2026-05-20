@@ -1,0 +1,11 @@
+[package]
+name        = "frame-codec"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "OTK frame encoding and decoding for reliable and unreliable transports."
+
+[dependencies]
+minicbor = { workspace = true, features = ["alloc"] }
+protocol = { path = "../protocol", package = "otk-protocol" }
+cobs     = { workspace = true }
