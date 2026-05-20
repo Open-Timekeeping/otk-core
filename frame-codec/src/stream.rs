@@ -12,15 +12,15 @@ use crate::error::FrameError;
 /// their own integrity guarantees.
 pub fn encode_stream(envelope: &OtkEnvelope, max_frame_size: usize) -> Result<Vec<u8>, FrameError> {
     let payload = minicbor::to_vec(envelope).map_err(|_| FrameError::EncodeFailed)?;
-    if payload.len() > max_frame_size {
-        return Err(FrameError::OversizeFrame { len: Some(payload.len()), max: max_frame_size });
+    // The 4-byte length prefix caps the on-wire payload at u32::MAX regardless of
+    // what the caller passes as max_frame_size, so clamp to produce an accurate error.
+    let effective_max = max_frame_size.min(u32::MAX as usize);
+    if payload.len() > effective_max {
+        return Err(FrameError::OversizeFrame { len: Some(payload.len()), max: effective_max });
     }
-    // The length prefix is a u32; on 64-bit targets max_frame_size may legally
-    // exceed u32::MAX, which would silently truncate the prefix and desync receivers.
-    let len_u32 = u32::try_from(payload.len())
-        .map_err(|_| FrameError::OversizeFrame { len: Some(payload.len()), max: max_frame_size })?;
+    // payload.len() <= effective_max <= u32::MAX, so the cast is exact on all targets.
     let mut out = Vec::with_capacity(4 + payload.len());
-    out.extend_from_slice(&len_u32.to_be_bytes());
+    out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
     out.extend_from_slice(&payload);
     Ok(out)
 }

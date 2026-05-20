@@ -53,6 +53,8 @@ pub fn encode_serial(envelope: &OtkEnvelope, max_frame_size: usize) -> Result<Ve
 /// value, not the internal on-wire limit.
 pub struct SerialFrameDecoder {
     buf: Vec<u8>,
+    /// Reusable COBS decode scratch buffer; retained across frames to avoid per-frame allocs.
+    scratch: Vec<u8>,
     /// Original raw-payload limit; reported in OversizeFrame errors.
     max_frame_size: usize,
     /// Maximum on-wire byte count before `0x00`: COBS(payload || CRC-16).
@@ -64,7 +66,7 @@ impl SerialFrameDecoder {
     pub fn new(max_frame_size: usize) -> Self {
         // Derive the on-wire limit: add 2 bytes for CRC-16, then apply COBS overhead.
         let max_wire_size = cobs::max_encoding_length(max_frame_size.saturating_add(2));
-        Self { buf: Vec::new(), max_frame_size, max_wire_size, discarding: false }
+        Self { buf: Vec::new(), scratch: Vec::new(), max_frame_size, max_wire_size, discarding: false }
     }
 
     pub fn push(&mut self, bytes: &[u8]) -> Vec<Result<OtkEnvelope, FrameError>> {
@@ -76,11 +78,12 @@ impl SerialFrameDecoder {
                 if self.buf.is_empty() {
                     continue;
                 }
-                let frame_bytes = core::mem::take(&mut self.buf);
-                let mut decoded_buf = vec![0u8; frame_bytes.len()];
-                match cobs::decode(&frame_bytes, &mut decoded_buf) {
+                self.scratch.resize(self.buf.len(), 0);
+                let decode_result = cobs::decode(&self.buf, &mut self.scratch);
+                self.buf.clear(); // retain capacity for next frame
+                match decode_result {
                     Ok(decoded_len) => {
-                        let decoded = &decoded_buf[..decoded_len];
+                        let decoded = &self.scratch[..decoded_len];
                         if decoded_len < 2 {
                             results.push(Err(FrameError::CorruptFrame));
                             continue;
