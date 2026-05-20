@@ -50,7 +50,7 @@ pub struct StreamFrameDecoder {
     buf: Vec<u8>,
     max_frame_size: usize,
     /// Bytes remaining to skip from an oversize frame's payload.
-    skip_bytes: usize,
+    skip_bytes: u64,
 }
 
 impl StreamFrameDecoder {
@@ -75,8 +75,8 @@ impl StreamFrameDecoder {
         // skip_bytes > 0 at the start of a call (invariant maintained below).
         let bytes = if self.skip_bytes > 0 {
             debug_assert!(self.buf.is_empty());
-            let skip = bytes.len().min(self.skip_bytes);
-            self.skip_bytes -= skip;
+            let skip = bytes.len().min(usize::try_from(self.skip_bytes).unwrap_or(usize::MAX));
+            self.skip_bytes -= skip as u64;
             &bytes[skip..]
         } else {
             bytes
@@ -88,9 +88,9 @@ impl StreamFrameDecoder {
             // Drain any leftover oversize bytes already in the buffer (set by
             // the oversize branch below within the same push call).
             if self.skip_bytes > 0 {
-                let drain = self.buf.len().min(self.skip_bytes);
+                let drain = self.buf.len().min(usize::try_from(self.skip_bytes).unwrap_or(usize::MAX));
                 self.buf.drain(..drain);
-                self.skip_bytes -= drain;
+                self.skip_bytes -= drain as u64;
                 if self.skip_bytes > 0 {
                     break; // buf is now empty; wait for next push
                 }
@@ -108,19 +108,17 @@ impl StreamFrameDecoder {
                 let len = usize::try_from(len_u32).ok(); // None only on 16-bit targets
                 results.push(Err(FrameError::OversizeFrame { len, max: self.max_frame_size }));
                 self.buf.drain(..4); // consume the header; payload bytes follow
-                self.skip_bytes = usize::try_from(len_u32).unwrap_or(usize::MAX);
+                self.skip_bytes = len_u32 as u64;
                 continue; // drain payload bytes from buf on next iteration
             }
             let len = len_u32 as usize;
             if self.buf.len() < 4 + len {
                 break;
             }
-            let payload = self.buf[4..4 + len].to_vec();
+            let result = minicbor::decode::<OtkEnvelope>(&self.buf[4..4 + len])
+                .map_err(FrameError::DecodeFailed);
             self.buf.drain(..4 + len);
-            match minicbor::decode::<OtkEnvelope>(&payload) {
-                Ok(envelope) => results.push(Ok(envelope)),
-                Err(e) => results.push(Err(FrameError::DecodeFailed(e))),
-            }
+            results.push(result);
         }
         results
     }

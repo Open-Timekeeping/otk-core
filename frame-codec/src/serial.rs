@@ -63,7 +63,7 @@ pub struct SerialFrameDecoder {
 impl SerialFrameDecoder {
     pub fn new(max_frame_size: usize) -> Self {
         // Derive the on-wire limit: add 2 bytes for CRC-16, then apply COBS overhead.
-        let max_wire_size = cobs::max_encoding_length(max_frame_size + 2);
+        let max_wire_size = cobs::max_encoding_length(max_frame_size.saturating_add(2));
         Self { buf: Vec::new(), max_frame_size, max_wire_size, discarding: false }
     }
 
