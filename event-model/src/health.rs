@@ -6,6 +6,7 @@ use crate::timestamp::{SourceAttestation, SyncState};
 
 /// Operational state of a detector adapter at a point in time.
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DetectorHealthStatus {
     #[n(0)]
     Healthy,
@@ -28,6 +29,7 @@ pub enum DetectorHealthStatus {
 /// Periodic or state-change health report from a detector adapter.
 /// First-class event; distinct from detection events.
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DetectorHealthEvent {
     #[n(0)]
     pub detector_id: DetectorId,
@@ -47,6 +49,7 @@ pub struct DetectorHealthEvent {
 /// Periodic or state-change status report from a timebase implementation.
 /// Reports the actual runtime sync state; operator config is a claim, this is the truth.
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TimebaseStatusEvent {
     #[n(0)]
     pub timebase_id: TimebaseId,

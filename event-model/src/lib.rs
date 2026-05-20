@@ -24,6 +24,7 @@
 #![no_std]
 extern crate alloc;
 
+pub mod crossing;
 pub mod detection;
 pub mod health;
 pub mod ids;
@@ -31,9 +32,13 @@ pub mod metadata;
 pub mod stream;
 pub mod timestamp;
 
+pub use crossing::CrossingEvent;
 pub use detection::{Detection, SensorData};
 pub use health::{DetectorHealthEvent, DetectorHealthStatus, TimebaseStatusEvent};
-pub use ids::{DetectionId, DetectorId, OperatorId, StreamId, SubjectId, TimebaseId, TimingPointId};
+pub use ids::{
+    CrossingId, DetectionId, DetectorId, OperatorId, StreamId, SubjectId, TimebaseId,
+    TimingPointId,
+};
 pub use metadata::{AdapterCapabilities, AdapterMetadataEvent};
 pub use stream::{StreamDescriptor, StreamKind};
 pub use timestamp::{SourceAttestation, SyncState, TimestampingMethod};
@@ -43,6 +48,7 @@ use minicbor::{Decode, Encode};
 /// Top-level event envelope. Every event kind in the Timing Fabric is a variant here.
 /// This is the type the wire-protocol layer wraps in its message envelope.
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum OtkEvent {
     #[n(0)]
     Detection(#[n(0)] Detection),
@@ -55,4 +61,7 @@ pub enum OtkEvent {
 
     #[n(3)]
     AdapterMetadata(#[n(0)] AdapterMetadataEvent),
+
+    #[n(4)]
+    Crossing(#[n(0)] CrossingEvent),
 }

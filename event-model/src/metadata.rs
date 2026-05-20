@@ -8,6 +8,7 @@ use crate::timestamp::{SourceAttestation, TimestampingMethod};
 /// Declared capabilities of a detector adapter. Published in `AdapterMetadataEvent`
 /// at startup and on configuration change.
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AdapterCapabilities {
     /// The streams this adapter publishes to, with their kinds and addresses.
     #[n(0)]
@@ -26,6 +27,7 @@ pub struct AdapterCapabilities {
 /// Registration and capability declaration event. Published by an adapter at startup
 /// and whenever its configuration changes.
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AdapterMetadataEvent {
     #[n(0)]
     pub detector_id: DetectorId,

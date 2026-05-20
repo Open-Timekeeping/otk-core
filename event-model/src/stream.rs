@@ -8,6 +8,7 @@ use crate::ids::{DetectorId, StreamId, TimingPointId};
 /// Stream naming conventions (e.g. `<detector_id>/raw`) are a deployment/runtime-node
 /// concern, not an event-model concern.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StreamKind {
     /// One `Detection` per sensor pulse. Optional: only present if the adapter declares
     /// support for raw signal emission. Policy on whether to expose this stream to
@@ -29,6 +30,7 @@ pub enum StreamKind {
 /// Describes a stream published by an adapter or produced by timing-core.
 /// Declared in `AdapterMetadataEvent` so consumers know what streams to subscribe to.
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamDescriptor {
     /// The stream's addressable identity within the deployment.
     #[n(0)]

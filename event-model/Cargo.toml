@@ -7,3 +7,7 @@ description = "Canonical Open Timekeeping event types and identifiers (Event Mod
 
 [dependencies]
 minicbor = { workspace = true, features = ["derive", "alloc"] }
+serde    = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
+
+[features]
+serde = ["dep:serde"]
