@@ -84,21 +84,25 @@ impl StreamFrameDecoder {
 
         self.buf.extend_from_slice(bytes);
         let mut results = Vec::new();
+        // Cursor into self.buf: advance pos rather than draining on every frame.
+        // A single drain(..pos) at the end avoids O(n²) byte-shifting when many
+        // small frames arrive in one push() call.
+        let mut pos = 0usize;
         loop {
-            // Drain any leftover oversize bytes already in the buffer (set by
-            // the oversize branch below within the same push call).
+            // Consume oversize payload bytes that are already in the buffer.
             if self.skip_bytes > 0 {
-                let drain = self.buf.len().min(usize::try_from(self.skip_bytes).unwrap_or(usize::MAX));
-                self.buf.drain(..drain);
-                self.skip_bytes -= drain as u64;
+                let available = self.buf.len() - pos;
+                let skip = available.min(usize::try_from(self.skip_bytes).unwrap_or(usize::MAX));
+                pos += skip;
+                self.skip_bytes -= skip as u64;
                 if self.skip_bytes > 0 {
-                    break; // buf is now empty; wait for next push
+                    break; // exhausted buffered bytes; wait for next push
                 }
             }
-            if self.buf.len() < 4 {
+            if self.buf.len() - pos < 4 {
                 break;
             }
-            let len_u32 = u32::from_be_bytes(self.buf[..4].try_into().unwrap());
+            let len_u32 = u32::from_be_bytes(self.buf[pos..pos + 4].try_into().unwrap());
             // Compare via u64 so the guard is safe on 16-bit targets (usize = u16):
             // a direct `as usize` cast would silently truncate a value like 0x10000
             // to 0, turning a corrupt-length frame into an apparent empty payload.
@@ -107,18 +111,21 @@ impl StreamFrameDecoder {
             if (len_u32 as u64) > (self.max_frame_size as u64) {
                 let len = usize::try_from(len_u32).ok(); // None only on 16-bit targets
                 results.push(Err(FrameError::OversizeFrame { len, max: self.max_frame_size }));
-                self.buf.drain(..4); // consume the header; payload bytes follow
+                pos += 4; // consume the header; payload bytes follow
                 self.skip_bytes = len_u32 as u64;
-                continue; // drain payload bytes from buf on next iteration
+                continue;
             }
             let len = len_u32 as usize;
-            if self.buf.len() < 4 + len {
+            if self.buf.len() - pos < 4 + len {
                 break;
             }
-            let result = minicbor::decode::<OtkEnvelope>(&self.buf[4..4 + len])
+            let result = minicbor::decode::<OtkEnvelope>(&self.buf[pos + 4..pos + 4 + len])
                 .map_err(FrameError::DecodeFailed);
-            self.buf.drain(..4 + len);
+            pos += 4 + len;
             results.push(result);
+        }
+        if pos > 0 {
+            self.buf.drain(..pos);
         }
         results
     }
