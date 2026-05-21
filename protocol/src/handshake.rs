@@ -1,3 +1,4 @@
+use alloc::string::String;
 use alloc::vec::Vec;
 use event_model::stream::StreamDescriptor;
 use minicbor::{Decode, Encode};
@@ -8,6 +9,11 @@ use minicbor::{Decode, Encode};
 /// The server selects the highest protocol version within the declared `[min, max]` range.
 /// If no overlap exists with the server's supported range, the server replies with
 /// [`ConnectReject`] carrying `reason = VersionNotSupported`.
+///
+/// `auth_token` is `None` by default; runtimes that require authentication reject any
+/// `Connect` whose token is missing or unrecognized with
+/// [`ConnectReject`] carrying `reason = Unauthorized`. Old producers that pre-date this
+/// field and don't encode it decode as `None`.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Connect {
     /// Minimum protocol version this producer supports.
@@ -21,6 +27,13 @@ pub struct Connect {
     /// Streams this producer intends to publish to during this session.
     #[n(2)]
     pub streams: Vec<StreamDescriptor>,
+
+    /// Optional auth credential. The runtime decides what to do with it. Plaintext on
+    /// the wire today; once a TLS-capable transport binding ships, deployments that
+    /// require auth should run the OTK frames over TLS so the token is never visible
+    /// in cleartext.
+    #[n(3)]
+    pub auth_token: Option<String>,
 }
 
 /// Handshake acceptance. The server sends this in response to a successful [`Connect`].
