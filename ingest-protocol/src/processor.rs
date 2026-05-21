@@ -73,7 +73,17 @@ impl PostHandshakeProcessor {
                     .map_err(|e| ProtocolError::DecodeFailed(format!("Heartbeat: {e}")))?;
                 Ok(InboundAction::Heartbeat)
             }
-            MessageType::Disconnect => Ok(InboundAction::Disconnect),
+            MessageType::Disconnect => {
+                // Per the OtkEnvelope contract, Disconnect is the only message type
+                // that MUST carry payload = None. Reject malformed disconnects with
+                // a payload so misbehaving producers don't get to silently slip past
+                // contract validation just because the message type happens to be
+                // terminal.
+                if envelope.payload.is_some() {
+                    return Err(ProtocolError::UnexpectedDisconnectPayload);
+                }
+                Ok(InboundAction::Disconnect)
+            }
             other => Err(ProtocolError::UnexpectedMessageType(other)),
         }
     }
@@ -150,6 +160,15 @@ mod tests {
     fn disconnect_yields_disconnect_action() {
         let env = envelope(MessageType::Disconnect, None);
         assert!(matches!(p().process(env).unwrap(), InboundAction::Disconnect));
+    }
+
+    #[test]
+    fn disconnect_with_payload_errors() {
+        let env = envelope(MessageType::Disconnect, Some(vec![0u8; 4]));
+        assert!(matches!(
+            p().process(env).unwrap_err(),
+            ProtocolError::UnexpectedDisconnectPayload
+        ));
     }
 
     #[test]

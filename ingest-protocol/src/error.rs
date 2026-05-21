@@ -43,6 +43,9 @@ pub enum ProtocolError {
     #[error("Heartbeat message had no payload (protocol envelope contract requires one)")]
     MissingHeartbeatPayload,
 
+    #[error("Disconnect message carried a payload (protocol envelope contract requires none)")]
+    UnexpectedDisconnectPayload,
+
     #[error("CBOR decode failed: {0}")]
     DecodeFailed(String),
 

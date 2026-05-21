@@ -14,7 +14,13 @@ use minicbor::{Decode, Encode};
 /// `Connect` whose token is missing or unrecognized with
 /// [`ConnectReject`] carrying `reason = Unauthorized`. Old producers that pre-date this
 /// field and don't encode it decode as `None`.
-#[derive(Debug, Clone, Encode, Decode)]
+///
+/// `Debug` is implemented manually to redact `auth_token`, so debug-printing a
+/// `Connect` (in logs, panic messages, telemetry, `tracing` events, etc.) does
+/// not leak the credential. Whether the token is present or absent IS shown,
+/// since that distinguishes the unauthenticated vs authenticated paths during
+/// debugging.
+#[derive(Clone, Encode, Decode)]
 pub struct Connect {
     /// Minimum protocol version this producer supports.
     #[n(0)]
@@ -34,6 +40,20 @@ pub struct Connect {
     /// in cleartext.
     #[n(3)]
     pub auth_token: Option<String>,
+}
+
+impl core::fmt::Debug for Connect {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Connect")
+            .field("protocol_version_min", &self.protocol_version_min)
+            .field("protocol_version_max", &self.protocol_version_max)
+            .field("streams", &self.streams)
+            .field(
+                "auth_token",
+                &self.auth_token.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
 }
 
 /// Handshake acceptance. The server sends this in response to a successful [`Connect`].
