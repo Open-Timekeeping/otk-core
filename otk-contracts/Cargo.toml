@@ -1,0 +1,11 @@
+[package]
+name        = "otk-contracts"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Open Timekeeping trait contracts: DetectorAdapter and Timebase. Dependency-light surface third-party implementations can compile against."
+
+[dependencies]
+event-model = { workspace = true }
+async-trait = { workspace = true }
+thiserror   = { workspace = true }
