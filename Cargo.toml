@@ -6,6 +6,8 @@ members  = [
     "port-in-ingest",
     "port-out-event-log",
     "frame-codec",
+    "ingest-protocol",
+    "otk-contracts",
 ]
 resolver = "2"
 
