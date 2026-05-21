@@ -11,6 +11,17 @@
 //! `thiserror`) so a vendor's adapter crate does not have to pull in
 //! `tokio`/`minicbor`/`reqwest` to know what trait to implement.
 //!
+//! # Features
+//!
+//! - **`std`** (default): enables `From<std::io::Error>` conversions on the
+//!   contract's error types for ergonomic `?`-propagation from `std`-using
+//!   adapters. The error variants themselves carry `String`, not
+//!   `std::io::Error`, so disabling the feature lets embedded firmware
+//!   consumers construct `*::Io(String)` directly. The trait surface itself
+//!   currently still requires `std` through `async-trait`'s `Box<dyn Future>`
+//!   desugaring; full `no_std + alloc` support for the traits themselves is
+//!   tracked in `spec/open-questions.md`.
+//!
 //! The `otk-sdk` crate re-exports these contracts and supplies the
 //! producer/client/builder ergonomics around them.
 

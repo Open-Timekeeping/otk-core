@@ -24,6 +24,12 @@ pub enum AdapterEvent {
 }
 
 /// Errors that can occur during detector adapter operations.
+///
+/// The `Io` variant carries a `String` rather than `std::io::Error` so the
+/// contract crate stays usable from `no_std + alloc` consumers (notably
+/// firmware adapter implementations). `From<std::io::Error>` is provided
+/// behind the default `std` feature for ergonomic `?`-propagation from
+/// `std`-using adapters.
 #[derive(Debug, Error)]
 pub enum AdapterError {
     #[error("device not found: {0}")]
@@ -33,12 +39,13 @@ pub enum AdapterError {
     #[error("configuration error: {0}")]
     Configuration(String),
     #[error("I/O error: {0}")]
-    Io(#[source] std::io::Error),
+    Io(String),
 }
 
+#[cfg(feature = "std")]
 impl From<std::io::Error> for AdapterError {
     fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
+        Self::Io(e.to_string())
     }
 }
 

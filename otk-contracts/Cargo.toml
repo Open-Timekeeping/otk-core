@@ -5,6 +5,13 @@ edition     = "2021"
 license     = "Apache-2.0"
 description = "Open Timekeeping trait contracts: DetectorAdapter and Timebase. Dependency-light surface third-party implementations can compile against."
 
+[features]
+default = ["std"]
+# Enables `From<std::io::Error>` conversions on the contract's error types.
+# Embedded firmware consumers can disable default features and construct
+# `*::Io(String)` directly.
+std     = []
+
 [dependencies]
 event-model = { workspace = true }
 async-trait = { workspace = true }

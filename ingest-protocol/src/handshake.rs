@@ -1,6 +1,7 @@
 use protocol::{
-    ids::ProducerId, Connect, ConnectAck, ConnectReject, ConnectRejectReason, MessageType,
-    OtkEnvelope, PROTOCOL_VERSION,
+    ids::{CorrelationId, ProducerId},
+    Connect, ConnectAck, ConnectReject, ConnectRejectReason, MessageType, OtkEnvelope,
+    PROTOCOL_VERSION,
 };
 
 use crate::error::HandshakeError;
@@ -77,6 +78,10 @@ fn handshake_inner(
         return Err(HandshakeError::UnexpectedMessageType(envelope.message_type));
     }
 
+    // Echo the producer's correlation_id (if any) back in the reply per the
+    // OtkEnvelope contract: the sender sets correlation_id, the responder
+    // echoes it so request/reply pairs match.
+    let echo_correlation = envelope.correlation_id.clone();
     let producer_id = envelope.source_id;
 
     let connect_bytes = envelope
@@ -91,7 +96,7 @@ fn handshake_inner(
             supported_version_min: server_version,
             supported_version_max: server_version,
         };
-        let reply = build_reject_envelope(&reject);
+        let reply = build_reject_envelope(&reject, server_version, echo_correlation)?;
         return Ok(HandshakeOutcome::Rejected {
             reply,
             reason: ConnectRejectReason::VersionNotSupported,
@@ -104,37 +109,52 @@ fn handshake_inner(
             supported_version_min: server_version,
             supported_version_max: server_version,
         };
-        let reply = build_reject_envelope(&reject);
+        let reply = build_reject_envelope(&reject, server_version, echo_correlation)?;
         return Ok(HandshakeOutcome::Rejected { reply, reason });
     }
 
     let ack = ConnectAck { negotiated_version: server_version };
-    let reply = build_ack_envelope(&ack, server_version);
+    let reply = build_ack_envelope(&ack, server_version, echo_correlation)?;
     let processor = PostHandshakeProcessor::new(producer_id, server_version);
 
     Ok(HandshakeOutcome::Accepted { reply, processor })
 }
 
-fn server_envelope(message_type: MessageType, payload: Option<Vec<u8>>, version: u8) -> OtkEnvelope {
+fn server_envelope(
+    message_type: MessageType,
+    payload: Option<Vec<u8>>,
+    version: u8,
+    correlation_id: Option<CorrelationId>,
+) -> OtkEnvelope {
     OtkEnvelope {
         protocol_version: version,
         message_type,
         source_id: ProducerId::from("server"),
         stream_id: None,
         sequence_number: None,
-        correlation_id: None,
+        correlation_id,
         payload,
     }
 }
 
-fn build_ack_envelope(ack: &ConnectAck, version: u8) -> OtkEnvelope {
-    let payload = minicbor::to_vec(ack).expect("ConnectAck encode");
-    server_envelope(MessageType::ConnectAck, Some(payload), version)
+fn build_ack_envelope(
+    ack: &ConnectAck,
+    version: u8,
+    correlation_id: Option<CorrelationId>,
+) -> Result<OtkEnvelope, HandshakeError> {
+    let payload = minicbor::to_vec(ack)
+        .map_err(|e| HandshakeError::EncodeFailed(format!("ConnectAck: {e}")))?;
+    Ok(server_envelope(MessageType::ConnectAck, Some(payload), version, correlation_id))
 }
 
-fn build_reject_envelope(reject: &ConnectReject) -> OtkEnvelope {
-    let payload = minicbor::to_vec(reject).expect("ConnectReject encode");
-    server_envelope(MessageType::ConnectReject, Some(payload), PROTOCOL_VERSION)
+fn build_reject_envelope(
+    reject: &ConnectReject,
+    version: u8,
+    correlation_id: Option<CorrelationId>,
+) -> Result<OtkEnvelope, HandshakeError> {
+    let payload = minicbor::to_vec(reject)
+        .map_err(|e| HandshakeError::EncodeFailed(format!("ConnectReject: {e}")))?;
+    Ok(server_envelope(MessageType::ConnectReject, Some(payload), version, correlation_id))
 }
 
 #[cfg(test)]

@@ -12,6 +12,12 @@ pub enum HandshakeError {
     #[error("CBOR decode failed: {0}")]
     DecodeFailed(String),
 
+    /// Failed to encode a server-side reply (ConnectAck / ConnectReject).
+    /// Practically only occurs on allocator failure; surfaced rather than
+    /// `.expect()`-panicking so long-running runtimes can report it.
+    #[error("CBOR encode failed: {0}")]
+    EncodeFailed(String),
+
     #[error(
         "no overlap between producer protocol-version range [{producer_min}, {producer_max}] \
          and server version {server_version}"
@@ -34,6 +40,9 @@ pub enum ProtocolError {
 
     #[error("Event message had no payload")]
     MissingEventPayload,
+
+    #[error("Heartbeat message had no payload (protocol envelope contract requires one)")]
+    MissingHeartbeatPayload,
 
     #[error("CBOR decode failed: {0}")]
     DecodeFailed(String),

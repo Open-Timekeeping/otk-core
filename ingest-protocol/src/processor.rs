@@ -1,5 +1,5 @@
 use event_model::OtkEvent;
-use protocol::{ids::ProducerId, MessageType, OtkEnvelope};
+use protocol::{ids::ProducerId, Heartbeat, MessageType, OtkEnvelope};
 
 use crate::error::ProtocolError;
 
@@ -60,7 +60,19 @@ impl PostHandshakeProcessor {
                     .map_err(|e| ProtocolError::DecodeFailed(format!("OtkEvent: {e}")))?;
                 Ok(InboundAction::Event(event))
             }
-            MessageType::Heartbeat => Ok(InboundAction::Heartbeat),
+            MessageType::Heartbeat => {
+                // Per the OtkEnvelope contract, every message type except Disconnect
+                // carries a CBOR-encoded payload of its corresponding inner type.
+                // Validate the Heartbeat decodes cleanly; the sent_at_ns value isn't
+                // surfaced to callers (heartbeats are keep-alives, not data) but
+                // catching malformed heartbeats here protects against buggy producers.
+                let payload = envelope
+                    .payload
+                    .ok_or(ProtocolError::MissingHeartbeatPayload)?;
+                let _: Heartbeat = minicbor::decode(&payload)
+                    .map_err(|e| ProtocolError::DecodeFailed(format!("Heartbeat: {e}")))?;
+                Ok(InboundAction::Heartbeat)
+            }
             MessageType::Disconnect => Ok(InboundAction::Disconnect),
             other => Err(ProtocolError::UnexpectedMessageType(other)),
         }
@@ -119,9 +131,19 @@ mod tests {
     }
 
     #[test]
-    fn heartbeat_yields_heartbeat_action() {
-        let env = envelope(MessageType::Heartbeat, None);
+    fn heartbeat_with_valid_payload_yields_heartbeat_action() {
+        let hb = protocol::Heartbeat { sent_at_ns: 1 };
+        let env = envelope(MessageType::Heartbeat, Some(minicbor::to_vec(&hb).unwrap()));
         assert!(matches!(p().process(env).unwrap(), InboundAction::Heartbeat));
+    }
+
+    #[test]
+    fn heartbeat_with_missing_payload_errors() {
+        let env = envelope(MessageType::Heartbeat, None);
+        assert!(matches!(
+            p().process(env).unwrap_err(),
+            ProtocolError::MissingHeartbeatPayload
+        ));
     }
 
     #[test]

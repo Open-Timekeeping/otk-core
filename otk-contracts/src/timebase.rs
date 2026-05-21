@@ -43,6 +43,10 @@ pub enum TimebaseEvent {
 }
 
 /// Errors that can occur during timebase operations.
+///
+/// The `Io` variant carries a `String` rather than `std::io::Error` so the
+/// contract crate stays usable from `no_std + alloc` consumers. See the
+/// matching note on [`crate::AdapterError`].
 #[derive(Debug, Error)]
 pub enum TimebaseError {
     #[error("device not found: {0}")]
@@ -52,12 +56,13 @@ pub enum TimebaseError {
     #[error("configuration error: {0}")]
     Configuration(String),
     #[error("I/O error: {0}")]
-    Io(#[source] std::io::Error),
+    Io(String),
 }
 
+#[cfg(feature = "std")]
 impl From<std::io::Error> for TimebaseError {
     fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
+        Self::Io(e.to_string())
     }
 }
 
