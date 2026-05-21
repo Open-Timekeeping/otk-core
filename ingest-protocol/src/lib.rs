@@ -14,17 +14,22 @@
 //! # Lifecycle
 //!
 //! ```text
-//! envelope --> ServerHandshake::process --> Accepted{ack, processor}
-//!                                          \-> Rejected{reply, reason}
+//! envelope --> perform_server_handshake(_with_auth)
+//!                --> Ok(HandshakeOutcome::Accepted  { reply, processor })
+//!                --> Ok(HandshakeOutcome::Rejected  { reply, reason })
+//!                --> Err(HandshakeError::*)
 //!
-//! envelope --> processor.process --> InboundAction::Event(otk_event)
-//!                                  \-> InboundAction::Heartbeat   (ignore, keep reading)
-//!                                  \-> InboundAction::Disconnect  (close cleanly)
+//! envelope --> processor.process
+//!                --> Ok(InboundAction::Event(otk_event))   deliver to runtime
+//!                --> Ok(InboundAction::Heartbeat)          keep reading
+//!                --> Ok(InboundAction::Disconnect)         close cleanly
+//!                --> Err(ProtocolError::*)
 //! ```
 //!
-//! Adapters send the handshake's reply envelope as the first outbound frame
-//! and use the returned [`PostHandshakeProcessor`] to handle every envelope
-//! that follows.
+//! On `Accepted` or `Rejected`, the adapter sends `reply` back to the producer
+//! as the first outbound frame. On `Accepted` it then drives the returned
+//! [`PostHandshakeProcessor`] over every envelope that follows; on `Rejected`
+//! it closes the session.
 //!
 //! [`OtkEnvelope`]: protocol::OtkEnvelope
 //! [`port_in_ingest::IngestSession`]: https://docs.rs/port-in-ingest
