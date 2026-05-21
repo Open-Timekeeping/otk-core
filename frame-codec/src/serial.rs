@@ -63,6 +63,17 @@ pub struct SerialFrameDecoder {
 }
 
 impl SerialFrameDecoder {
+    /// Returns `true` if the decoder is holding bytes from a frame that
+    /// hasn't yet decoded to a complete envelope (in-progress COBS data
+    /// awaiting a `0x00` delimiter, or bytes being skipped during oversize
+    /// discard).
+    ///
+    /// Transports use this on EOF to distinguish a clean close at a frame
+    /// boundary from a truncated frame.
+    pub fn has_pending(&self) -> bool {
+        !self.buf.is_empty() || self.discarding
+    }
+
     pub fn new(max_frame_size: usize) -> Self {
         // Derive the on-wire limit: add 2 bytes for CRC-16, then apply COBS overhead.
         let max_wire_size = cobs::max_encoding_length(max_frame_size.saturating_add(2));
@@ -165,6 +176,30 @@ mod tests {
     #[test]
     fn crc16_known_vector() {
         assert_eq!(crc16_ccitt_false(b"123456789"), 0x29B1);
+    }
+
+    #[test]
+    fn serial_has_pending_false_when_empty() {
+        let dec = SerialFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
+        assert!(!dec.has_pending());
+    }
+
+    #[test]
+    fn serial_has_pending_true_with_partial_frame() {
+        let mut dec = SerialFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
+        // Feed a few bytes that don't contain the 0x00 delimiter; decoder buffers them.
+        let results = dec.push(&[0xAA, 0xBB, 0xCC]);
+        assert!(results.is_empty());
+        assert!(dec.has_pending());
+    }
+
+    #[test]
+    fn serial_has_pending_false_after_complete_frame() {
+        let original = test_envelope();
+        let frame = encode_serial(&original, crate::DEFAULT_MAX_FRAME_SIZE).unwrap();
+        let mut dec = SerialFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
+        let _ = dec.push(&frame);
+        assert!(!dec.has_pending(), "decoder buffer should be empty after a complete frame");
     }
 
     #[test]
