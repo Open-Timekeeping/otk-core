@@ -1,0 +1,12 @@
+[package]
+name        = "ingest-protocol"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Transport-independent OTK ingest protocol state machine: handshake negotiation and post-handshake envelope dispatch."
+
+[dependencies]
+event-model = { workspace = true }
+protocol    = { path = "../protocol", package = "otk-protocol" }
+minicbor    = { workspace = true, features = ["alloc"] }
+thiserror   = { workspace = true }
