@@ -80,8 +80,10 @@ fn handshake_inner(
 
     // Echo the producer's correlation_id (if any) back in the reply per the
     // OtkEnvelope contract: the sender sets correlation_id, the responder
-    // echoes it so request/reply pairs match.
-    let echo_correlation = envelope.correlation_id.clone();
+    // echoes it so request/reply pairs match. Move out of the owned envelope
+    // rather than cloning; envelope.payload is moved later (a separate field,
+    // so the partial-move is fine), and the other fields aren't read after.
+    let echo_correlation = envelope.correlation_id;
     let producer_id = envelope.source_id;
 
     let connect_bytes = envelope

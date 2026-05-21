@@ -20,7 +20,8 @@
 //!   consumers construct `*::Io(String)` directly. The trait surface itself
 //!   currently still requires `std` through `async-trait`'s `Box<dyn Future>`
 //!   desugaring; full `no_std + alloc` support for the traits themselves is
-//!   tracked in `spec/open-questions.md`.
+//!   tracked in the
+//!   [spec repo's `open-questions.md`](https://github.com/Open-Timekeeping/spec/blob/main/open-questions.md).
 //!
 //! The `otk-sdk` crate re-exports these contracts and supplies the
 //! producer/client/builder ergonomics around them.
