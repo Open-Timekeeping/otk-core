@@ -1,6 +1,15 @@
 use thiserror::Error;
 
 /// A handshake-phase failure. Transport-agnostic.
+///
+/// Version-range mismatch is **not** an error here: it is reported as
+/// [`HandshakeOutcome::Rejected`] with
+/// [`protocol::ConnectRejectReason::VersionNotSupported`] so the adapter
+/// still sends a `ConnectReject` envelope back to the producer before
+/// closing. Only structural / protocol-level problems surface as
+/// `HandshakeError`.
+///
+/// [`HandshakeOutcome::Rejected`]: crate::HandshakeOutcome::Rejected
 #[derive(Debug, Error)]
 pub enum HandshakeError {
     #[error("expected Connect envelope, got {0:?}")]
@@ -17,16 +26,6 @@ pub enum HandshakeError {
     /// `.expect()`-panicking so long-running runtimes can report it.
     #[error("CBOR encode failed: {0}")]
     EncodeFailed(String),
-
-    #[error(
-        "no overlap between producer protocol-version range [{producer_min}, {producer_max}] \
-         and server version {server_version}"
-    )]
-    VersionNotSupported {
-        producer_min: u8,
-        producer_max: u8,
-        server_version: u8,
-    },
 }
 
 /// A post-handshake envelope-processing failure. Transport-agnostic.
