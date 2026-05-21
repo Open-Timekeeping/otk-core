@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+use alloc::string::String;
 use async_trait::async_trait;
 use event_model::timestamp::SourceAttestation;
 use event_model::{TimebaseId, TimebaseStatusEvent};
@@ -62,6 +64,7 @@ pub enum TimebaseError {
 #[cfg(feature = "std")]
 impl From<std::io::Error> for TimebaseError {
     fn from(e: std::io::Error) -> Self {
+        use alloc::string::ToString;
         Self::Io(e.to_string())
     }
 }

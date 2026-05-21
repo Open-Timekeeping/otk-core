@@ -60,9 +60,12 @@ pub fn perform_server_handshake_with_auth(
     handshake_inner(envelope, PROTOCOL_VERSION, authoriser)
 }
 
-/// Variant exposing the server version explicitly. Useful for tests that need
-/// to simulate an older or newer server build.
-pub fn handshake_with_server_version(
+/// Variant exposing the server version explicitly. Useful for unit tests
+/// that need to simulate an older or newer server build.
+///
+/// Not part of the stable public API: kept `pub(crate)` so the in-crate
+/// tests can reach it without committing to a semver-stable surface.
+pub(crate) fn handshake_with_server_version(
     envelope: OtkEnvelope,
     server_version: u8,
 ) -> Result<HandshakeOutcome, HandshakeError> {
@@ -221,5 +224,106 @@ mod tests {
         };
         let err = perform_server_handshake(env).expect_err("must error");
         assert!(matches!(err, HandshakeError::UnexpectedMessageType(_)));
+    }
+
+    // ── Auth coverage ────────────────────────────────────────────────────
+
+    use core::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    /// Records what the authoriser was called with for inspection.
+    struct RecordingAuthoriser {
+        decision: Result<(), ConnectRejectReason>,
+        last_call: Mutex<Option<(String, Option<String>)>>,
+        called: AtomicBool,
+    }
+
+    impl RecordingAuthoriser {
+        fn new(decision: Result<(), ConnectRejectReason>) -> Self {
+            Self {
+                decision,
+                last_call: Mutex::new(None),
+                called: AtomicBool::new(false),
+            }
+        }
+    }
+
+    impl crate::ConnectAuthoriser for RecordingAuthoriser {
+        fn authorise(
+            &self,
+            producer_id: &ProducerId,
+            token: Option<&str>,
+        ) -> Result<(), ConnectRejectReason> {
+            self.called.store(true, Ordering::SeqCst);
+            *self.last_call.lock().unwrap() = Some((
+                producer_id.to_string(),
+                token.map(|s| s.to_string()),
+            ));
+            self.decision
+        }
+    }
+
+    fn connect_envelope_with_token(producer_id: &str, token: Option<&str>) -> OtkEnvelope {
+        let connect = Connect {
+            protocol_version_min: 0,
+            protocol_version_max: u8::MAX,
+            streams: vec![],
+            auth_token: token.map(String::from),
+        };
+        OtkEnvelope {
+            protocol_version: u8::MAX,
+            message_type: MessageType::Connect,
+            source_id: ProducerId::from(producer_id),
+            stream_id: None,
+            sequence_number: None,
+            correlation_id: None,
+            payload: Some(minicbor::to_vec(&connect).unwrap()),
+        }
+    }
+
+    #[test]
+    fn authoriser_invoked_with_producer_id_and_token() {
+        let auth = RecordingAuthoriser::new(Ok(()));
+        let env = connect_envelope_with_token("prod-7", Some("hunter2"));
+        let _ = perform_server_handshake_with_auth(env, &auth).expect("handshake");
+        assert!(auth.called.load(Ordering::SeqCst));
+        let (pid, tok) = auth.last_call.lock().unwrap().clone().expect("called");
+        assert_eq!(pid, "prod-7");
+        assert_eq!(tok.as_deref(), Some("hunter2"));
+    }
+
+    #[test]
+    fn authoriser_sees_none_when_token_absent() {
+        let auth = RecordingAuthoriser::new(Ok(()));
+        let env = connect_envelope_with_token("prod-7", None);
+        let _ = perform_server_handshake_with_auth(env, &auth).expect("handshake");
+        let (_, tok) = auth.last_call.lock().unwrap().clone().expect("called");
+        assert_eq!(tok, None);
+    }
+
+    #[test]
+    fn authoriser_rejection_yields_rejected_outcome_with_payload() {
+        let auth = RecordingAuthoriser::new(Err(ConnectRejectReason::Unauthorized));
+        let env = connect_envelope_with_token("prod-7", Some("wrong"));
+        match perform_server_handshake_with_auth(env, &auth).expect("handshake") {
+            HandshakeOutcome::Rejected { reply, reason } => {
+                assert!(matches!(reason, ConnectRejectReason::Unauthorized));
+                assert_eq!(reply.message_type, MessageType::ConnectReject);
+                let payload = reply.payload.as_deref().expect("reject payload present");
+                let decoded: ConnectReject = minicbor::decode(payload).expect("decode reject");
+                assert!(matches!(decoded.reason, ConnectRejectReason::Unauthorized));
+            }
+            HandshakeOutcome::Accepted { .. } => panic!("expected Rejected on auth failure"),
+        }
+    }
+
+    #[test]
+    fn authoriser_not_called_when_version_negotiation_fails_first() {
+        // Auth check shouldn't happen if the version range doesn't overlap;
+        // version rejection takes precedence so producers get a clearer error.
+        let auth = RecordingAuthoriser::new(Ok(()));
+        let bad_version_env = connect_envelope(99, 99, "prod-7");
+        let _ = perform_server_handshake_with_auth(bad_version_env, &auth).expect("handshake");
+        assert!(!auth.called.load(Ordering::SeqCst), "authoriser should not run on version-mismatch path");
     }
 }

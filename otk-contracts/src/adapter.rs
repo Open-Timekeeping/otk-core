@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+use alloc::string::String;
 use async_trait::async_trait;
 use event_model::{AdapterMetadataEvent, Detection, DetectorHealthEvent, DetectorId};
 use thiserror::Error;
@@ -45,6 +47,7 @@ pub enum AdapterError {
 #[cfg(feature = "std")]
 impl From<std::io::Error> for AdapterError {
     fn from(e: std::io::Error) -> Self {
+        use alloc::string::ToString;
         Self::Io(e.to_string())
     }
 }
