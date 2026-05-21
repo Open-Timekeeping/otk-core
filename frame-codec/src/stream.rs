@@ -58,6 +58,19 @@ impl StreamFrameDecoder {
         Self { buf: Vec::new(), max_frame_size, skip_bytes: 0 }
     }
 
+    /// Returns `true` if the decoder is holding bytes from a frame that
+    /// hasn't yet decoded to a complete envelope (either a partial length
+    /// prefix / payload in `buf`, or remaining bytes to skip from an
+    /// oversize-frame detection).
+    ///
+    /// Transports use this on EOF to distinguish a clean close at a frame
+    /// boundary (`!has_pending()` → caller can return `Ok(None)`) from a
+    /// truncated frame (`has_pending()` → caller should report a decode /
+    /// truncation error).
+    pub fn has_pending(&self) -> bool {
+        !self.buf.is_empty() || self.skip_bytes > 0
+    }
+
     /// Feed incoming bytes into the decoder.
     ///
     /// Returns every complete [`OtkEnvelope`] (or framing error) that can be
@@ -162,6 +175,44 @@ mod tests {
             minicbor::to_vec(&original).unwrap(),
             minicbor::to_vec(decoded).unwrap(),
         );
+    }
+
+    #[test]
+    fn has_pending_false_when_empty() {
+        let dec = StreamFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
+        assert!(!dec.has_pending());
+    }
+
+    #[test]
+    fn has_pending_true_with_partial_length_prefix() {
+        let mut dec = StreamFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
+        // Push 2 of the 4 length-prefix bytes; decoder buffers them, returns no envelopes.
+        let results = dec.push(&[0u8, 0u8]);
+        assert!(results.is_empty());
+        assert!(dec.has_pending());
+    }
+
+    #[test]
+    fn has_pending_false_after_complete_frame() {
+        let original = test_envelope();
+        let frame = encode_stream(&original, crate::DEFAULT_MAX_FRAME_SIZE).unwrap();
+        let mut dec = StreamFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
+        let _ = dec.push(&frame);
+        assert!(!dec.has_pending(), "decoder buffer should be empty after a complete frame");
+    }
+
+    #[test]
+    fn has_pending_true_while_skipping_oversize() {
+        let mut dec = StreamFrameDecoder::new(16);
+        // Header declares 1_000 bytes (oversize for max=16); feed header + a few payload bytes.
+        let mut input = Vec::new();
+        input.extend_from_slice(&1_000u32.to_be_bytes());
+        input.extend_from_slice(&[0xAAu8; 10]);
+        let results = dec.push(&input);
+        assert_eq!(results.len(), 1);
+        assert!(matches!(results[0], Err(crate::FrameError::OversizeFrame { .. })));
+        // Still has ~990 bytes left to skip from the oversize frame.
+        assert!(dec.has_pending());
     }
 
     #[test]
