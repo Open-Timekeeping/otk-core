@@ -11,6 +11,7 @@ members  = [
     "adapter-ingest-tcp",
     "adapter-event-log-segment",
     "adapter-ingest-unix-socket",
+    "otk-sdk",
 ]
 resolver = "2"
 
