@@ -10,6 +10,7 @@ members  = [
     "otk-contracts",
     "adapter-ingest-tcp",
     "adapter-event-log-segment",
+    "adapter-ingest-unix-socket",
 ]
 resolver = "2"
 
