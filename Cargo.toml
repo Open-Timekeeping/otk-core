@@ -8,6 +8,7 @@ members  = [
     "frame-codec",
     "ingest-protocol",
     "otk-contracts",
+    "adapter-ingest-tcp",
 ]
 resolver = "2"
 
