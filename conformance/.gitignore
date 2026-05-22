@@ -1,0 +1,22 @@
+# Rust build artifacts
+/target
+**/*.rs.bk
+
+# Lockfile: lib crate, follows Cargo convention of not tracking Cargo.lock.
+# Downstream consumers pick their own resolution.
+Cargo.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Direnv / local env
+.envrc
+.env
+.env.local
