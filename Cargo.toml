@@ -1,7 +1,7 @@
 [workspace]
 members  = [
     "event-model",
-    "protocol",
+    "otk-protocol",
     "timing-core",
     "port-in-ingest",
     "port-out-event-log",

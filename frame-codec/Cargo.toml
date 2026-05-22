@@ -7,5 +7,5 @@ description = "OTK frame encoding and decoding for reliable and unreliable trans
 
 [dependencies]
 minicbor = { workspace = true, features = ["alloc"] }
-protocol = { path = "../protocol", package = "otk-protocol" }
+protocol = { path = "../otk-protocol", package = "otk-protocol" }
 cobs     = { workspace = true }
