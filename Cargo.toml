@@ -9,6 +9,7 @@ members  = [
     "ingest-protocol",
     "otk-contracts",
     "adapter-ingest-tcp",
+    "adapter-event-log-segment",
 ]
 resolver = "2"
 

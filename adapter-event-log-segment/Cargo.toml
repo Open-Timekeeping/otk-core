@@ -1,0 +1,18 @@
+[package]
+name        = "adapter-event-log-segment"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Segment-file event log backend for OTK. Implements port-out-event-log using fixed-budget segment files on disk."
+
+[dependencies]
+port-out-event-log = { path = "../port-out-event-log" }
+event-model        = { path = "../event-model" }
+async-trait = { workspace = true }
+minicbor    = { version = "0.24", features = ["derive", "alloc"] }
+crc32fast   = "1"
+tokio       = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync", "io-util", "time"] }
+
+[dev-dependencies]
+tokio    = { version = "1", features = ["rt", "macros", "fs", "sync", "io-util", "time", "test-util"] }
+tempfile = "3"
