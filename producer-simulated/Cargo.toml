@@ -10,11 +10,14 @@ name = "otk-simulator"
 path = "src/main.rs"
 
 [dependencies]
-otk-sdk    = { path = "../otk-sdk", default-features = false, features = ["producer"] }
-async-trait = "0.1"
-tokio       = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "sync"] }
-serde       = { version = "1", features = ["derive"] }
-toml        = "0.8"
-tracing     = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-thiserror   = "2"
+otk-sdk            = { workspace = true, features = ["producer"] }
+async-trait        = { workspace = true }
+# `std` so derive(Serialize/Deserialize) on the std-backed config
+# structs (String, Vec<String>, ...) works. The workspace pin keeps
+# default-features off so no_std crates aren't forced to drag std in.
+serde              = { workspace = true, features = ["derive", "std"] }
+thiserror          = { workspace = true }
+tokio              = { workspace = true, features = ["rt-multi-thread", "macros", "time", "signal", "sync"] }
+toml               = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }

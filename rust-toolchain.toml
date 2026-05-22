@@ -1,0 +1,8 @@
+# Pinning the Rust toolchain so CI and every contributor's local
+# build see the same compiler. Clippy ships new lints with every
+# stable release (~every 6 weeks); without a pin, a PR that touched
+# nothing can fail CI overnight because of a fresh `-D warnings`
+# default. Bump deliberately as part of a "toolchain upgrade" PR.
+[toolchain]
+channel    = "1.95.0"
+components = ["rustfmt", "clippy"]

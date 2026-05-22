@@ -23,7 +23,7 @@ pub enum RetentionPolicy {
 
     /// Enforce both a time limit and a size limit; whichever is exceeded first
     /// triggers eviction. `max_bytes` uses the same advisory byte accounting
-    /// as [`SizeBased`].
+    /// as [`Self::SizeBased`].
     Hybrid { max_age_secs: u64, max_bytes: u64 },
 }
 
@@ -39,8 +39,14 @@ mod tests {
             RetentionPolicy::TimeBased { max_age_secs: 3600 }
         );
         assert_eq!(
-            RetentionPolicy::Hybrid { max_age_secs: 3600, max_bytes: 1_000_000 },
-            RetentionPolicy::Hybrid { max_age_secs: 3600, max_bytes: 1_000_000 },
+            RetentionPolicy::Hybrid {
+                max_age_secs: 3600,
+                max_bytes: 1_000_000
+            },
+            RetentionPolicy::Hybrid {
+                max_age_secs: 3600,
+                max_bytes: 1_000_000
+            },
         );
         assert_ne!(
             RetentionPolicy::SizeBased { max_bytes: 100 },
@@ -52,8 +58,12 @@ mod tests {
     fn retention_policy_variants_are_constructible() {
         let _ = [
             RetentionPolicy::Indefinite,
-            RetentionPolicy::TimeBased { max_age_secs: 86400 },
-            RetentionPolicy::SizeBased { max_bytes: 1_073_741_824 },
+            RetentionPolicy::TimeBased {
+                max_age_secs: 86400,
+            },
+            RetentionPolicy::SizeBased {
+                max_bytes: 1_073_741_824,
+            },
             RetentionPolicy::Hybrid {
                 max_age_secs: 3600,
                 max_bytes: 500_000_000,

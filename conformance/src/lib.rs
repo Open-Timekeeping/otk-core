@@ -36,7 +36,7 @@
 //! - **Vendor-specific test packs** (MYLAPS, RaceResult, etc.). Out of
 //!   scope at the v0 contract level.
 //!
-//! [`spec/`]: https://github.com/Open-Timekeeping/spec
-//! [`open-questions.md`]: https://github.com/Open-Timekeeping/spec/blob/main/open-questions.md
+//! [`spec/`]: https://github.com/Open-Timekeeping/open-timekeeping/tree/main/spec
+//! [`open-questions.md`]: https://github.com/Open-Timekeeping/open-timekeeping/blob/main/spec/open-questions.md
 
 pub mod mem_log;

@@ -121,7 +121,10 @@ mod tests {
     #[test]
     fn invalid_input_display() {
         let e = StorageError::InvalidInput("events slice must not be empty".into());
-        assert_eq!(e.to_string(), "invalid input: events slice must not be empty");
+        assert_eq!(
+            e.to_string(),
+            "invalid input: events slice must not be empty"
+        );
     }
 
     #[test]

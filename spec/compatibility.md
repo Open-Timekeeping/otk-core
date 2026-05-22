@@ -8,19 +8,19 @@ What it means to be Open Timekeeping–compatible, and how that's verified.
 
 An implementation that claims **Open Timekeeping compatibility** must:
 
-1. Satisfy the contracts for every role it plays. Most contract crates live in [`otk-core`](https://github.com/Open-Timekeeping/otk-core); `plugin-api` is listed for completeness but is not yet specified.
+1. Satisfy the contracts for every role it plays. Most contract crates live in this workspace; `plugin-api` is listed for completeness but is not yet specified.
 
-   - For a **detector adapter** or **timebase**: the trait in [`otk-contracts`](https://github.com/Open-Timekeeping/otk-core/tree/main/otk-contracts) (`DetectorAdapter` / `Timebase`).
-   - For a **producer** talking to a runtime node across a process boundary: the OTK Protocol stack ([`event-model`](https://github.com/Open-Timekeeping/otk-core/tree/main/event-model), [`otk-protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/protocol), [`frame-codec`](https://github.com/Open-Timekeeping/otk-core/tree/main/frame-codec)) over at least one supported transport binding. Producers may use [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk)'s `producer` feature, or build directly on the stack.
-   - For a **transport-binding ingest adapter**: the [`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest) trait. Server-side framing and handshake are reusable via [`frame-codec`](https://github.com/Open-Timekeeping/otk-core/tree/main/frame-codec) + [`ingest-protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/ingest-protocol); concrete adapters consume both.
-   - For a **storage backend**: the [`port-out-event-log`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-out-event-log) trait.
+   - For a **detector adapter** or **timebase**: the trait in [`otk-contracts`](../otk-contracts) (`DetectorAdapter` / `Timebase`).
+   - For a **producer** talking to a runtime node across a process boundary: the OTK Protocol stack ([`event-model`](../event-model), [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec)) over at least one supported transport binding. Producers may use [`otk-sdk`](../otk-sdk)'s `producer` feature, or build directly on the stack.
+   - For a **transport-binding ingest adapter**: the [`port-in-ingest`](../port-in-ingest) trait. Server-side framing and handshake are reusable via [`frame-codec`](../frame-codec) + [`ingest-protocol`](../ingest-protocol); concrete adapters consume both.
+   - For a **storage backend**: the [`port-out-event-log`](../port-out-event-log) trait.
    - For a **runtime-node plugin**: `plugin-api`. (Not yet specified; see [`open-questions.md`](open-questions.md).)
 
-2. Produce or consume canonical events as defined in [`event-model`](https://github.com/Open-Timekeeping/otk-core/tree/main/event-model).
+2. Produce or consume canonical events as defined in [`event-model`](../event-model).
 
 3. Honor the cross-cutting principles in [architecture.md § Operating principles](architecture.md): honest provenance, immutability, mechanism-vs-policy, domain neutrality.
 
-4. Pass the relevant subset of [`conformance`](https://github.com/Open-Timekeeping/conformance) with the canonical [`conformance-fixtures`](https://github.com/Open-Timekeeping/conformance-fixtures).
+4. Pass the relevant subset of [`conformance`](../conformance) with the canonical [`conformance-fixtures`](../conformance-fixtures).
 
 A claim of compatibility without a passing conformance run is just a claim.
 
@@ -55,7 +55,7 @@ The protocol stack is verified layer by layer:
 - **Event Model.** Every emitted event matches its `event-model` schema and carries the required provenance blocks.
 - **Wire Protocol envelopes.** Versioning, content-type, sender id, sequence numbers, ack/error message types conform to the protocol spec.
 - **Frame Codec.** Encode/decode round-trips. Stream framing handles partial reads, message boundaries, and oversize messages. Resynchronizable framing (e.g., COBS, SLIP) recovers cleanly after corruption on byte-stream transports.
-- **Transport Binding.** Each binding's listener/client lifecycle, reconnect semantics, and error reporting match the [`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest) contract. Bindings are tested independently of higher layers.
+- **Transport Binding.** Each binding's listener/client lifecycle, reconnect semantics, and error reporting match the [`port-in-ingest`](../port-in-ingest) contract. Bindings are tested independently of higher layers.
 - **Compatibility.** Producer and consumer can negotiate compatible protocol versions across any supported binding; mismatches fail clearly, not silently.
 
 ### Storage backend

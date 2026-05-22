@@ -8,8 +8,8 @@ use ingest_protocol::{
     perform_server_handshake_with_auth, ConnectAuthoriser, HandshakeError, HandshakeOutcome,
     InboundAction, PostHandshakeProcessor, ProtocolError,
 };
+use otk_protocol::OtkEnvelope;
 use port_in_ingest::{IngestError, IngestSession};
-use protocol::OtkEnvelope;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
@@ -130,13 +130,15 @@ impl TcpIngestSession {
 impl IngestSession for TcpIngestSession {
     async fn next_event(&mut self) -> Result<Option<OtkEvent>, IngestError> {
         loop {
-            if self.pending.is_empty() {
-                if !self.fill_pending().await? {
-                    return Ok(None);
-                }
+            if self.pending.is_empty() && !self.fill_pending().await? {
+                return Ok(None);
             }
             let envelope = self.pending.pop_front().expect("just filled or non-empty");
-            match self.processor.process(envelope).map_err(protocol_err_to_ingest)? {
+            match self
+                .processor
+                .process(envelope)
+                .map_err(protocol_err_to_ingest)?
+            {
                 InboundAction::Event(event) => return Ok(Some(event)),
                 InboundAction::Heartbeat => continue,
                 InboundAction::Disconnect => return Ok(None),
@@ -189,10 +191,10 @@ mod tests {
     };
     use frame_codec::encode_stream;
     use ingest_protocol::ConnectAuthoriser;
-    use port_in_ingest::{EventIngestPort, IngestError};
-    use protocol::{
+    use otk_protocol::{
         ids::ProducerId, Connect, ConnectRejectReason, MessageType, OtkEnvelope, PROTOCOL_VERSION,
     };
+    use port_in_ingest::{EventIngestPort, IngestError};
     use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
@@ -216,7 +218,10 @@ mod tests {
         minicbor::decode(&payload).unwrap()
     }
 
-    async fn client_handshake(addr: std::net::SocketAddr, version_min: u8) -> (TcpStream, OtkEnvelope) {
+    async fn client_handshake(
+        addr: std::net::SocketAddr,
+        version_min: u8,
+    ) -> (TcpStream, OtkEnvelope) {
         client_handshake_with_token(addr, version_min, None).await
     }
 
@@ -345,6 +350,15 @@ mod tests {
             (stream, reply)
         });
 
+        // The two branches handle the only two possible relations between
+        // the producer's `protocol_version_max = 0` and the server's
+        // PROTOCOL_VERSION: today PROTOCOL_VERSION > 0 so the reject arm
+        // is the live one; if PROTOCOL_VERSION ever drops back to 0 (or
+        // we introduce a 0-versioned legacy server build) the accept arm
+        // is what we want. The clippy lint correctly notes the
+        // currently-unreachable arm is "always false"; we're preserving
+        // it intentionally as a forward-compat assertion.
+        #[allow(clippy::absurd_extreme_comparisons)]
         if PROTOCOL_VERSION > 0 {
             assert!(accept_result.is_err());
             assert_eq!(reply.message_type, MessageType::ConnectReject);
@@ -361,21 +375,23 @@ mod tests {
         let addr = port.local_addr().unwrap();
 
         let event = test_event();
-        let event_env = wrap_in_envelope(
-            MessageType::Event,
-            Some(minicbor::to_vec(&event).unwrap()),
-        );
+        let event_env =
+            wrap_in_envelope(MessageType::Event, Some(minicbor::to_vec(&event).unwrap()));
         // Per the OtkEnvelope contract, Heartbeat carries a CBOR-encoded payload.
-        let hb = protocol::Heartbeat { sent_at_ns: 0 };
-        let heartbeat_env = wrap_in_envelope(
-            MessageType::Heartbeat,
-            Some(minicbor::to_vec(&hb).unwrap()),
-        );
+        let hb = otk_protocol::Heartbeat { sent_at_ns: 0 };
+        let heartbeat_env =
+            wrap_in_envelope(MessageType::Heartbeat, Some(minicbor::to_vec(hb).unwrap()));
 
         let (session_result, _) = tokio::join!(port.accept(), async {
             let (mut stream, _) = client_handshake(addr, PROTOCOL_VERSION).await;
-            stream.write_all(&encode_stream(&heartbeat_env, 65_535).unwrap()).await.unwrap();
-            stream.write_all(&encode_stream(&event_env, 65_535).unwrap()).await.unwrap();
+            stream
+                .write_all(&encode_stream(&heartbeat_env, 65_535).unwrap())
+                .await
+                .unwrap();
+            stream
+                .write_all(&encode_stream(&event_env, 65_535).unwrap())
+                .await
+                .unwrap();
         });
 
         let mut session = session_result.unwrap();
@@ -391,7 +407,10 @@ mod tests {
 
         let (session_result, _) = tokio::join!(port.accept(), async {
             let (mut stream, _) = client_handshake(addr, PROTOCOL_VERSION).await;
-            stream.write_all(&encode_stream(&disconnect_env, 65_535).unwrap()).await.unwrap();
+            stream
+                .write_all(&encode_stream(&disconnect_env, 65_535).unwrap())
+                .await
+                .unwrap();
         });
 
         let mut session = session_result.unwrap();
@@ -473,13 +492,16 @@ mod tests {
             .unwrap();
         let addr = port.local_addr().unwrap();
 
-        let (accept_result, (_, reply)) =
-            tokio::join!(port.accept(), client_handshake_with_token(addr, PROTOCOL_VERSION, None));
+        let (accept_result, (_, reply)) = tokio::join!(
+            port.accept(),
+            client_handshake_with_token(addr, PROTOCOL_VERSION, None)
+        );
 
         assert!(accept_result.is_err(), "missing token must reject accept()");
         assert_eq!(reply.message_type, MessageType::ConnectReject);
-        let reject: protocol::ConnectReject =
-            minicbor::decode(reply.payload.as_deref().expect("reject payload")).expect("decode reject");
+        let reject: otk_protocol::ConnectReject =
+            minicbor::decode(reply.payload.as_deref().expect("reject payload"))
+                .expect("decode reject");
         assert!(matches!(reject.reason, ConnectRejectReason::Unauthorized));
     }
 
@@ -497,8 +519,9 @@ mod tests {
 
         assert!(accept_result.is_err(), "wrong token must reject accept()");
         assert_eq!(reply.message_type, MessageType::ConnectReject);
-        let reject: protocol::ConnectReject =
-            minicbor::decode(reply.payload.as_deref().expect("reject payload")).expect("decode reject");
+        let reject: otk_protocol::ConnectReject =
+            minicbor::decode(reply.payload.as_deref().expect("reject payload"))
+                .expect("decode reject");
         assert!(matches!(reject.reason, ConnectRejectReason::Unauthorized));
     }
 

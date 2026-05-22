@@ -171,27 +171,27 @@ which listener accepted the connection.
 ## What belongs here
 
 - The `otk-node` binary entry point and lifecycle.
-- Ingest pipeline for canonical events (multi-listener external + in-process plugin paths).
+- Ingest pipeline for canonical events (multi-listener; future in-process plugin path).
 - Listener configuration loading and supervision.
-- Event log integration (via `storage-api` backed by `storage-segment-log`).
-- Timing-domain orchestration (via `timing-core`).
+- Event log integration (via the [`port-out-event-log`](../port-out-event-log) trait, backed at v0 by [`adapter-event-log-segment`](../adapter-event-log-segment)).
+- Timing-domain orchestration (via [`timing-core`](../timing-core)).
 - Configuration loading, signal handling, and graceful shutdown.
 
 ## What does not belong here
 
-- OTK Protocol layer definitions (`event-model`, `wire-protocol`, `frame-codec`, `transport-api`).
-- The detector adapter contract (`detector-adapter-api`).
-- Specific detector adapter implementations (`adapter-*` repos).
-- Timing-domain logic (`timing-core`).
-- Concrete storage backends (`storage-*` repos).
-- Application UI (`app-*` repos).
+- OTK Protocol layer definitions: [`event-model`](../event-model), [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec).
+- The transport-binding ingest port trait: [`port-in-ingest`](../port-in-ingest). Implemented by the per-transport adapter crates.
+- The detector-adapter / timebase trait contracts: [`otk-contracts`](../otk-contracts).
+- Specific detector adapter implementations: `adapter-ingest-*` crates ([`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket)).
+- Timing-domain logic: [`timing-core`](../timing-core).
+- Concrete storage backends: `adapter-event-log-*` crates ([`adapter-event-log-segment`](../adapter-event-log-segment) at v0).
+- Frontend applications: future per-app repos (TypeScript stack, not in this Rust workspace).
 
 ## Dependencies
 
-**Depends on:** `event-model`, `wire-protocol`, `transport-api`, `transport-tcp`, `storage-api`,
-`storage-segment-log`, `timing-core`.
+**Depends on:** [`event-model`](../event-model), [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec), [`ingest-protocol`](../ingest-protocol), [`port-in-ingest`](../port-in-ingest), [`port-out-event-log`](../port-out-event-log), [`timing-core`](../timing-core), [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket) (cfg(unix)), [`adapter-event-log-segment`](../adapter-event-log-segment).
 
-**Commonly depended on by:** runtime end-users via the `otk-node` binary.
+**Commonly depended on by:** runtime end-users via the `otk-node` binary. No other workspace crate depends on `timing-node`; it sits at the top of the dependency graph as the composition root.
 
 ## License
 

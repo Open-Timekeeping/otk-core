@@ -47,7 +47,10 @@ async fn append_batch_returns_last_offset() {
 async fn append_empty_rejected_as_invalid_input() {
     let mut log = MemLog::new();
     let err = log.append(&[]).await.expect_err("empty append must error");
-    assert!(matches!(err, port_out_event_log::StorageError::InvalidInput(_)));
+    assert!(matches!(
+        err,
+        port_out_event_log::StorageError::InvalidInput(_)
+    ));
 }
 
 #[tokio::test]

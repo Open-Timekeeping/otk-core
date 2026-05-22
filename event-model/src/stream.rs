@@ -85,8 +85,12 @@ mod tests {
 
     #[test]
     fn stream_kind_round_trips_all_variants() {
-        for kind in [StreamKind::Raw, StreamKind::Detections, StreamKind::Processed] {
-            let encoded = minicbor::to_vec(&kind).expect("encode failed");
+        for kind in [
+            StreamKind::Raw,
+            StreamKind::Detections,
+            StreamKind::Processed,
+        ] {
+            let encoded = minicbor::to_vec(kind).expect("encode failed");
             let decoded: StreamKind = minicbor::decode(&encoded).expect("decode failed");
             assert_eq!(kind, decoded);
         }

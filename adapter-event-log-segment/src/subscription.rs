@@ -39,11 +39,10 @@ impl SegmentLogSubscription {
     /// Returns `(best, min)` where `best` is the largest base_offset <=
     /// `offset` (the segment that should contain it), and `min` is the
     /// smallest base_offset of any `.seg` file in the directory.
-    async fn scan_segments(
-        &self,
-        offset: u64,
-    ) -> Result<(Option<u64>, Option<u64>), StorageError> {
-        let mut rd = tokio::fs::read_dir(&self.dir).await.map_err(StorageError::Io)?;
+    async fn scan_segments(&self, offset: u64) -> Result<(Option<u64>, Option<u64>), StorageError> {
+        let mut rd = tokio::fs::read_dir(&self.dir)
+            .await
+            .map_err(StorageError::Io)?;
 
         let mut best: Option<u64> = None;
         let mut min_base: Option<u64> = None;
@@ -196,10 +195,7 @@ impl SegmentLogSubscription {
                 }
                 match segment::read_record(&mut file, pos).await {
                     Ok(_) => {
-                        pos = file
-                            .stream_position()
-                            .await
-                            .map_err(StorageError::Io)?;
+                        pos = file.stream_position().await.map_err(StorageError::Io)?;
                         current += 1;
                     }
                     Err(StorageError::Corrupted(ref msg)) if msg == SENTINEL_MSG => {
@@ -312,11 +308,7 @@ impl LogSubscription for SegmentLogSubscription {
                             Ok(next_file) => {
                                 let is_active = match tokio::fs::metadata(&idx_path).await {
                                     Ok(_) => false,
-                                    Err(e)
-                                        if e.kind() == std::io::ErrorKind::NotFound =>
-                                    {
-                                        true
-                                    }
+                                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
                                     Err(e) => {
                                         self.closed = true;
                                         return Some(Err(StorageError::Io(e)));
@@ -348,8 +340,7 @@ impl LogSubscription for SegmentLogSubscription {
                             // or the index points past the end of valid data.
                             self.closed = true;
                             return Some(Err(StorageError::Corrupted(format!(
-                                "unexpected EOF on closed segment at byte position {}",
-                                byte_pos
+                                "unexpected EOF on closed segment at byte position {byte_pos}"
                             ))));
                         }
                     }

@@ -12,7 +12,7 @@ The glossary is intentionally short. Where a concept needs detail, link out to t
 A device or process that observes a physical event at a timing point and produces detection data. Loop detectors, RFID mat readers, beam-break gates, camera triggers, manual buttons, simulators, and replay sources are all detectors. The role is observation, not signal-decoding.
 
 **Detector adapter**
-The software role that turns detector-specific data into canonical Open Timekeeping events. Every detector event source (embedded native firmware, standalone producer process, edge gateway, runtime-node plugin, simulator, replay) implements the same `DetectorAdapter` trait from [`otk-core/otk-contracts`](https://github.com/Open-Timekeeping/otk-core/tree/main/otk-contracts). Packaging differs; the contract does not.
+The software role that turns detector-specific data into canonical Open Timekeeping events. Every detector event source (embedded native firmware, standalone producer process, edge gateway, runtime-node plugin, simulator, replay) implements the same `DetectorAdapter` trait from [`otk-contracts`](../otk-contracts). Packaging differs; the contract does not.
 
 **Timing point**
 A fixed location at which detections happen. A start/finish line, a sector boundary, a pit entry, a pit exit. A detector belongs to exactly one timing point at a time; a timing point can have one or more detectors (redundancy).
@@ -27,10 +27,10 @@ The deployable server process. Ingests canonical events from producers and plugi
 The deployed topology: one or more runtime nodes plus their connected detector producers, adapters, timebase sources, apps, APIs, storage, and operator tools. "Fabric" is *not* a synonym for any single repo or process; it names the system in deployment.
 
 **Timing Core**
-The timing-domain engine ([`otk-core/timing-core`](https://github.com/Open-Timekeeping/otk-core/tree/main/timing-core)). A library, not a server, that turns canonical detector events into crossings, laps, sectors, and timing results.
+The timing-domain engine ([`timing-core`](../timing-core)). A library, not a server, that turns canonical detector events into crossings, laps, sectors, and timing results.
 
 **Producer**
-Any process that sends canonical detector events to a runtime node as OTK frames over a supported transport binding. A producer hosts one or more detector adapters. A producer may use [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk)'s `producer` feature for convenience, or build directly on `otk-core`'s `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
+Any process that sends canonical detector events to a runtime node as OTK frames over a supported transport binding. A producer hosts one or more detector adapters. A producer may use [`otk-sdk`](../otk-sdk)'s `producer` feature for convenience, or build directly on `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
 
 **Plugin**
 An in-process module loaded by a runtime node. Detector adapters, timebases, storage backends, and exports can all be packaged as plugins. Plugins submit canonical events to the runtime in-process; no OTK frames cross a wire for plugin-loaded adapters.
@@ -46,19 +46,19 @@ A user-facing surface consuming the runtime node's outward APIs. `app-live-timin
 ## Protocol terminology
 
 **OTK Protocol**
-The transport-independent wire protocol used by Open Timekeeping components to exchange canonical timing messages. Defined as four stacked layers (Event Model, Wire Protocol, Frame Codec, Transport Binding), each with its own contract. The first three layers live as crates inside the [`otk-core`](https://github.com/Open-Timekeeping/otk-core) workspace; the fourth (Transport Binding) lives in per-transport adapter repos. OTK is not synonymous with TCP, HTTP, or any specific transport.
+The transport-independent wire protocol used by Open Timekeeping components to exchange canonical timing messages. Defined as four stacked layers (Event Model, Wire Protocol, Frame Codec, Transport Binding), each with its own contract. The first three layers live as crates in this workspace; the fourth (Transport Binding) lives in per-transport adapter crates. OTK is not synonymous with TCP, HTTP, or any specific transport.
 
-**Event Model** ([`otk-core/event-model`](https://github.com/Open-Timekeeping/otk-core/tree/main/event-model))
+**Event Model** ([`event-model`](../event-model))
 The canonical Open Timekeeping event types and identifiers: detection, hit, crossing, detector health, timebase status, adapter metadata, runtime control, and the identifier types tying them together. Has no transport assumptions. `no_std` + `alloc`.
 
-**Wire Protocol** ([`otk-core/protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/protocol), crate `otk-protocol`)
+**Wire Protocol** ([`otk-protocol`](../otk-protocol), crate `otk-protocol`)
 The OTK message envelope: versioning, message types, source identity, sequence numbers, acknowledgements (where applicable), error messages, and compatibility rules. Transport-agnostic.
 
-**Frame Codec** ([`otk-core/frame-codec`](https://github.com/Open-Timekeeping/otk-core/tree/main/frame-codec))
+**Frame Codec** ([`frame-codec`](../frame-codec))
 How OTK messages are encoded into byte frames and decoded back. Provides length-prefixed stream framing for reliable transports (TCP, Unix socket) and COBS + CRC-16/CCITT-FALSE serial framing for unreliable byte streams (UART, RS-232, RS-485). `no_std` + `alloc`; shared between server and firmware.
 
 **Transport Binding** (per-transport adapter repos)
-How OTK frames move over a specific physical or logical link. Each binding lives in its own repo: [`adapter-ingest-tcp`](https://github.com/Open-Timekeeping/adapter-ingest-tcp), [`adapter-ingest-unix-socket`](https://github.com/Open-Timekeeping/adapter-ingest-unix-socket), and future serial / USB-CDC / RS-485 / etc. The common abstraction every binding implements is [`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest).
+How OTK frames move over a specific physical or logical link. Each binding lives as a per-transport adapter crate: [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket), and future serial / USB-CDC / RS-485 / etc. The common abstraction every binding implements is [`port-in-ingest`](../port-in-ingest).
 
 **OTK frame**
 A single encoded OTK message ready to traverse a transport binding, including whatever delimiter/framing/CRC the binding requires.
@@ -145,4 +145,4 @@ The state machine describing whether a detector is producing trustworthy data. R
 The disciplined state of a timebase: `locked`, `holdover`, `free-run`, `unsynchronized`, `unknown`. Reported by the timebase, not inferred by detectors.
 
 **Compatibility**
-A claim that an implementation conforms to the contracts in this spec, demonstrated by passing the [`conformance`](https://github.com/Open-Timekeeping/conformance) suite.
+A claim that an implementation conforms to the contracts in this spec, demonstrated by passing the [`conformance`](../conformance) suite.

@@ -1,4 +1,4 @@
-use protocol::ConnectRejectReason;
+use otk_protocol::ConnectRejectReason;
 use thiserror::Error;
 
 /// Errors that can occur during producer operations.

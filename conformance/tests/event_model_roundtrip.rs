@@ -77,7 +77,9 @@ fn detector_health_degraded_roundtrip() {
     let event = OtkEvent::DetectorHealth(DetectorHealthEvent {
         detector_id: DetectorId::new("loop-1"),
         reported_at_ns: 1_700_000_000_000_000_000,
-        status: DetectorHealthStatus::Degraded { reason: "low SNR".into() },
+        status: DetectorHealthStatus::Degraded {
+            reason: "low SNR".into(),
+        },
         message: None,
     });
     roundtrip(&event);

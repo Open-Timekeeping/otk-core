@@ -57,7 +57,10 @@ async fn read_range_below_earliest_returns_retention_expired() {
         .await
         .expect_err("must error");
     match err {
-        StorageError::RetentionExpired { requested, earliest_available } => {
+        StorageError::RetentionExpired {
+            requested,
+            earliest_available,
+        } => {
             assert_eq!(requested, Offset::new(2));
             assert_eq!(earliest_available, Some(Offset::new(5)));
         }
@@ -87,8 +90,13 @@ async fn fully_evicted_log_reports_earliest_available_none() {
         .await
         .expect_err("must error");
     match err {
-        StorageError::RetentionExpired { earliest_available, .. } => {
-            assert_eq!(earliest_available, None, "fully-evicted log must report None");
+        StorageError::RetentionExpired {
+            earliest_available, ..
+        } => {
+            assert_eq!(
+                earliest_available, None,
+                "fully-evicted log must report None"
+            );
         }
         other => panic!("expected RetentionExpired, got {other:?}"),
     }
@@ -146,7 +154,10 @@ async fn in_flight_subscription_surfaces_retention_expired_when_evicted_past_cur
 
     // The next next_entry call must surface RetentionExpired.
     match sub.next_entry().await.expect("must yield a result") {
-        Err(StorageError::RetentionExpired { requested, earliest_available }) => {
+        Err(StorageError::RetentionExpired {
+            requested,
+            earliest_available,
+        }) => {
             assert_eq!(requested, Offset::new(1));
             assert_eq!(earliest_available, Some(Offset::new(5)));
         }
@@ -190,7 +201,14 @@ async fn evict_below_clamps_boundary_past_log_end() {
 
     // A new append succeeds and is readable, not immediately evicted.
     log.append(&[det(10)]).await.unwrap();
-    let entries = log.read_range(Offset::new(10), Some(Offset::new(11))).await.unwrap();
-    assert_eq!(entries.len(), 1, "post-clamp append must be readable, not soft-evicted");
+    let entries = log
+        .read_range(Offset::new(10), Some(Offset::new(11)))
+        .await
+        .unwrap();
+    assert_eq!(
+        entries.len(),
+        1,
+        "post-clamp append must be readable, not soft-evicted"
+    );
     assert_eq!(entries[0].offset, Offset::new(10));
 }

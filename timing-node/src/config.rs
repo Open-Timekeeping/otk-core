@@ -120,7 +120,12 @@ mod tests {
         let cfg = NodeConfig::default();
         assert_eq!(cfg.node_id, "otk-node");
         assert_eq!(cfg.listeners.len(), 1);
-        let ListenerConfig::Tcp { bind_addr, max_frame_bytes, .. } = &cfg.listeners[0] else {
+        let ListenerConfig::Tcp {
+            bind_addr,
+            max_frame_bytes,
+            ..
+        } = &cfg.listeners[0]
+        else {
             panic!("default listener should be TCP");
         };
         assert_eq!(bind_addr.port(), 8463);
@@ -143,7 +148,12 @@ max_frame_bytes = 1024
         let loaded: NodeConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(loaded.node_id, "n");
         assert_eq!(loaded.listeners.len(), 1);
-        let ListenerConfig::Tcp { id, bind_addr, max_frame_bytes } = &loaded.listeners[0] else {
+        let ListenerConfig::Tcp {
+            id,
+            bind_addr,
+            max_frame_bytes,
+        } = &loaded.listeners[0]
+        else {
             panic!("expected TCP listener");
         };
         assert_eq!(id, "tcp-main");
@@ -192,7 +202,9 @@ socket_path = "/var/run/otk-node.sock"
         let loaded: NodeConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(loaded.listeners.len(), 2);
         match &loaded.listeners[1] {
-            ListenerConfig::UnixSocket { id, socket_path, .. } => {
+            ListenerConfig::UnixSocket {
+                id, socket_path, ..
+            } => {
                 assert_eq!(id, "local-adapters");
                 assert_eq!(socket_path, &PathBuf::from("/var/run/otk-node.sock"));
             }

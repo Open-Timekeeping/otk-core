@@ -1,7 +1,7 @@
 //! OTK Frame Codec: encode and decode OTK messages as byte frames.
 //!
 //! This crate is the frame codec layer of the OTK protocol stack. It turns
-//! [`OtkEnvelope`] values from [`protocol`] into byte frames ready for a
+//! [`OtkEnvelope`] values from [`otk_protocol`] into byte frames ready for a
 //! transport binding, and parses incoming bytes back into envelopes.
 //!
 //! # Two frame formats
@@ -50,7 +50,7 @@
 //! This crate is `no_std` with `alloc`. Embedded firmware and `adapter-ingest-serial`
 //! can both depend on it without pulling in the full server stack.
 //!
-//! [`OtkEnvelope`]: protocol::OtkEnvelope
+//! [`OtkEnvelope`]: otk_protocol::OtkEnvelope
 
 #![no_std]
 extern crate alloc;
@@ -60,9 +60,9 @@ pub mod serial;
 pub mod stream;
 
 pub use error::FrameError;
-pub use serial::{SerialFrameDecoder, crc16_ccitt_false, encode_serial};
-pub use stream::{StreamFrameDecoder, encode_stream};
-pub use protocol::OtkEnvelope;
+pub use otk_protocol::OtkEnvelope;
+pub use serial::{crc16_ccitt_false, encode_serial, SerialFrameDecoder};
+pub use stream::{encode_stream, StreamFrameDecoder};
 
 /// Default maximum frame payload size in bytes.
 ///

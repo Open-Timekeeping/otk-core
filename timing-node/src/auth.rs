@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use ingest_protocol::{AllowAll, ConnectAuthoriser};
-use protocol::{ids::ProducerId, ConnectRejectReason};
+use otk_protocol::{ids::ProducerId, ConnectRejectReason};
 
 /// Authoriser that accepts a `Connect` iff its `auth_token` is in the allow-list.
 pub struct TokenAuthoriser {
@@ -55,9 +55,7 @@ mod tests {
     #[test]
     fn empty_token_list_yields_allow_all() {
         let auth = build_producer_authoriser(&[]);
-        assert!(auth
-            .authorise(&ProducerId::from("p"), None)
-            .is_ok());
+        assert!(auth.authorise(&ProducerId::from("p"), None).is_ok());
         assert!(auth
             .authorise(&ProducerId::from("p"), Some("anything"))
             .is_ok());
@@ -75,7 +73,11 @@ mod tests {
     #[test]
     fn token_list_accepts_listed_token() {
         let auth = build_producer_authoriser(&["secret".into(), "other".into()]);
-        assert!(auth.authorise(&ProducerId::from("p"), Some("secret")).is_ok());
-        assert!(auth.authorise(&ProducerId::from("p"), Some("other")).is_ok());
+        assert!(auth
+            .authorise(&ProducerId::from("p"), Some("secret"))
+            .is_ok());
+        assert!(auth
+            .authorise(&ProducerId::from("p"), Some("other"))
+            .is_ok());
     }
 }

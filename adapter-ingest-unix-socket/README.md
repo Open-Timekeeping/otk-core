@@ -1,8 +1,7 @@
 # adapter-ingest-unix-socket
 
 Unix-socket ingest adapter for Open Timekeeping. Implements
-[`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core) over a local
-AF_UNIX listener.
+[`port-in-ingest`](../port-in-ingest) over a local AF_UNIX listener.
 
 > **Status: active.** v0.
 
@@ -52,7 +51,7 @@ A stale socket file at `socket_path` is removed and re-created on bind.
 ## Dependencies
 
 **Depends on:** `port-in-ingest`, `otk-protocol`, `event-model`, `frame-codec`,
-`ingest-protocol` (all from `otk-core`).
+`ingest-protocol` (all in this workspace).
 
 **Commonly depended on by:** `timing-node`.
 

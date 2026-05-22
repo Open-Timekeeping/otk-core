@@ -3,7 +3,7 @@ use event_model::{
     TimebaseId, TimestampingMethod, TimingPointId,
 };
 use futures_util::StreamExt;
-use protocol::{ids::ProducerId, Connect, MessageType, OtkEnvelope, PROTOCOL_VERSION};
+use otk_protocol::{ids::ProducerId, Connect, MessageType, OtkEnvelope, PROTOCOL_VERSION};
 use reqwest::Client;
 use timing_node::{ListenerConfig, Node, NodeConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -18,12 +18,23 @@ fn encode_frame(envelope: &OtkEnvelope) -> Vec<u8> {
     frame
 }
 
+/// Read one length-prefixed frame, with a per-read timeout so a
+/// silent or truncated server can't hang the test under
+/// `cargo test`'s parallel runner. Same shape as the helper in
+/// tests/ingest_test.rs.
 async fn recv_frame(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
+    let read_timeout = tokio::time::Duration::from_secs(5);
     let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await.expect("read length");
+    tokio::time::timeout(read_timeout, stream.read_exact(&mut len_buf))
+        .await
+        .expect("recv_frame: timed out reading length prefix")
+        .expect("recv_frame: I/O error reading length prefix");
     let len = u32::from_be_bytes(len_buf) as usize;
     let mut payload = vec![0u8; len];
-    stream.read_exact(&mut payload).await.expect("read payload");
+    tokio::time::timeout(read_timeout, stream.read_exact(&mut payload))
+        .await
+        .expect("recv_frame: timed out reading payload")
+        .expect("recv_frame: I/O error reading payload");
     payload
 }
 
@@ -75,7 +86,7 @@ fn disconnect_envelope(producer_id: &str) -> OtkEnvelope {
 
 fn named_detection(idx: u64, detected_at_ns: u64) -> Detection {
     Detection {
-        detection_id: DetectionId::new(&format!("d-{idx}")),
+        detection_id: DetectionId::new(format!("d-{idx}")),
         detector_id: DetectorId::new("loop-1"),
         timing_point_id: TimingPointId::new("tp-start"),
         subject_id: Some(SubjectId::new("bib-42")),
@@ -86,13 +97,16 @@ fn named_detection(idx: u64, detected_at_ns: u64) -> Detection {
         timebase_id: TimebaseId::new("gps-1"),
         source_attestation: SourceAttestation::RuntimeDiscovered,
         sequence_number: idx,
-        sensor: SensorData::LoopTransponder { rssi_dbm: Some(-60), pulse_count: None },
+        sensor: SensorData::LoopTransponder {
+            rssi_dbm: Some(-60),
+            pulse_count: None,
+        },
     }
 }
 
 fn anonymous_detection(idx: u64) -> Detection {
     Detection {
-        detection_id: DetectionId::new(&format!("anon-{idx}")),
+        detection_id: DetectionId::new(format!("anon-{idx}")),
         detector_id: DetectorId::new("beam-1"),
         timing_point_id: TimingPointId::new("tp-beam"),
         subject_id: None,
@@ -116,14 +130,11 @@ async fn read_sse_events(client: &Client, url: &str, count: usize) -> Vec<serde_
     let mut events = Vec::new();
 
     while events.len() < count {
-        let chunk = tokio::time::timeout(
-            tokio::time::Duration::from_secs(5),
-            stream.next(),
-        )
-        .await
-        .expect("SSE read timed out")
-        .expect("SSE stream ended before expected event count")
-        .expect("SSE stream error");
+        let chunk = tokio::time::timeout(tokio::time::Duration::from_secs(5), stream.next())
+            .await
+            .expect("SSE read timed out")
+            .expect("SSE stream ended before expected event count")
+            .expect("SSE stream error");
 
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -173,7 +184,13 @@ async fn api_endpoints_work() {
     let (ingest_tasks, api_task) = node.run_with_shutdown(shutdown_rx);
 
     let base = format!("http://{api_addr}");
-    let client = Client::new();
+    // Carry a request timeout so a node that hangs (failed bind, stuck
+    // SSE stream, etc.) can't hold the test suite open indefinitely.
+    // Matches the helper in tests/api_ops_test.rs.
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("reqwest Client builds with timeout");
 
     // Status with empty log.
     let status: serde_json::Value = client
@@ -190,7 +207,9 @@ async fn api_endpoints_work() {
     // Ingest 5 named detections (all within grouping window → no crossings).
     {
         let mut tcp = tokio::net::TcpStream::connect(ingest_addr).await.unwrap();
-        tcp.write_all(&encode_frame(&connect_envelope("prod-1"))).await.unwrap();
+        tcp.write_all(&encode_frame(&connect_envelope("prod-1")))
+            .await
+            .unwrap();
         recv_frame(&mut tcp).await; // ConnectAck
 
         let base_ns: u64 = 1_700_000_000_000_000_000;
@@ -205,11 +224,17 @@ async fn api_endpoints_work() {
         for i in 0..5u64 {
             let seq = i + 1;
             let det = named_detection(seq, base_ns + i * 400_000_000);
-            tcp.write_all(&encode_frame(&event_envelope("prod-1", seq, OtkEvent::Detection(det))))
-                .await
-                .unwrap();
+            tcp.write_all(&encode_frame(&event_envelope(
+                "prod-1",
+                seq,
+                OtkEvent::Detection(det),
+            )))
+            .await
+            .unwrap();
         }
-        tcp.write_all(&encode_frame(&disconnect_envelope("prod-1"))).await.unwrap();
+        tcp.write_all(&encode_frame(&disconnect_envelope("prod-1")))
+            .await
+            .unwrap();
     }
 
     // Wait until all 5 events are visible via the API (poll with timeout).
@@ -226,7 +251,10 @@ async fn api_endpoints_work() {
         if s["latest_offset"] == serde_json::json!(4) {
             break;
         }
-        assert!(tokio::time::Instant::now() < deadline, "timed out waiting for 5 events");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "timed out waiting for 5 events"
+        );
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
 
@@ -256,7 +284,9 @@ async fn api_endpoints_work() {
     // Ingest 2 anonymous detections; each produces an immediate crossing.
     {
         let mut tcp = tokio::net::TcpStream::connect(ingest_addr).await.unwrap();
-        tcp.write_all(&encode_frame(&connect_envelope("prod-2"))).await.unwrap();
+        tcp.write_all(&encode_frame(&connect_envelope("prod-2")))
+            .await
+            .unwrap();
         recv_frame(&mut tcp).await; // ConnectAck
 
         // Same envelope/embedded alignment as the prod-1 block above:
@@ -265,11 +295,17 @@ async fn api_endpoints_work() {
         for i in 0..2u64 {
             let seq = i + 1;
             let det = anonymous_detection(seq);
-            tcp.write_all(&encode_frame(&event_envelope("prod-2", seq, OtkEvent::Detection(det))))
-                .await
-                .unwrap();
+            tcp.write_all(&encode_frame(&event_envelope(
+                "prod-2",
+                seq,
+                OtkEvent::Detection(det),
+            )))
+            .await
+            .unwrap();
         }
-        tcp.write_all(&encode_frame(&disconnect_envelope("prod-2"))).await.unwrap();
+        tcp.write_all(&encode_frame(&disconnect_envelope("prod-2")))
+            .await
+            .unwrap();
     }
 
     // Wait for 4 new log entries (2 detections + 2 crossings → latest_offset = 8).
@@ -286,7 +322,10 @@ async fn api_endpoints_work() {
         if s["latest_offset"] == serde_json::json!(8) {
             break;
         }
-        assert!(tokio::time::Instant::now() < deadline, "timed out waiting for crossing events");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "timed out waiting for crossing events"
+        );
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
 
@@ -294,7 +333,10 @@ async fn api_endpoints_work() {
     let tail = read_sse_events(&client, &format!("{base}/api/v1/events/stream?from=5"), 4).await;
     assert_eq!(tail.len(), 4);
     let has_crossing = tail.iter().any(|ev| ev["event"].get("Crossing").is_some());
-    assert!(has_crossing, "expected at least one Crossing event in the tail stream");
+    assert!(
+        has_crossing,
+        "expected at least one Crossing event in the tail stream"
+    );
 
     let _ = shutdown_tx.send(true);
     // Drain spawned tasks with a timeout so background workers don't

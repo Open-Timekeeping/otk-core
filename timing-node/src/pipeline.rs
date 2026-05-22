@@ -153,7 +153,7 @@ impl NodePipeline {
 
         let mut batch: Vec<OtkEvent> = Vec::with_capacity(1 + crossings.len());
         batch.push(event);
-        batch.extend(crossings.into_iter());
+        batch.extend(crossings);
 
         let offset = match self.log.lock().await.append(&batch).await {
             Ok(offset) => offset,
@@ -206,10 +206,9 @@ impl NodePipeline {
             .incr(&[("producer_id", producer_id), ("event_kind", event_kind)]);
         for c in batch.iter().skip(1) {
             if let OtkEvent::Crossing(ce) = c {
-                self.metrics.events_appended.incr(&[
-                    ("producer_id", "<timing-core>"),
-                    ("event_kind", "Crossing"),
-                ]);
+                self.metrics
+                    .events_appended
+                    .incr(&[("producer_id", "<timing-core>"), ("event_kind", "Crossing")]);
                 info!(
                     crossing_id = %ce.crossing_id,
                     timing_point = %ce.timing_point_id,
@@ -255,7 +254,10 @@ fn map_crossing(c: &Crossing) -> CrossingEvent {
 
 fn map_storage_err(e: StorageError) -> QueryError {
     match e {
-        StorageError::RetentionExpired { requested, earliest_available } => QueryError::RetentionExpired {
+        StorageError::RetentionExpired {
+            requested,
+            earliest_available,
+        } => QueryError::RetentionExpired {
             requested: requested.as_u64(),
             earliest_available: earliest_available.map(|o| o.as_u64()),
         },
@@ -267,12 +269,20 @@ fn map_storage_err(e: StorageError) -> QueryError {
 impl EventQueryPort for NodePipeline {
     async fn latest_offset(&self) -> Result<Option<u64>, QueryError> {
         let mut log = self.log.lock().await;
-        Ok(log.latest_offset().await.map_err(map_storage_err)?.map(|o| o.as_u64()))
+        Ok(log
+            .latest_offset()
+            .await
+            .map_err(map_storage_err)?
+            .map(|o| o.as_u64()))
     }
 
     async fn read_events(&self, from: u64, limit: usize) -> Result<EventPage, QueryError> {
         let mut log = self.log.lock().await;
-        let latest = log.latest_offset().await.map_err(map_storage_err)?.map(|o| o.as_u64());
+        let latest = log
+            .latest_offset()
+            .await
+            .map_err(map_storage_err)?
+            .map(|o| o.as_u64());
         let to = Offset::new(from.saturating_add(limit as u64));
         let entries = log
             .read_range(Offset::new(from), Some(to))
@@ -281,7 +291,10 @@ impl EventQueryPort for NodePipeline {
         Ok(EventPage {
             entries: entries
                 .into_iter()
-                .map(|e| EventEntry { offset: e.offset.as_u64(), event: e.event })
+                .map(|e| EventEntry {
+                    offset: e.offset.as_u64(),
+                    event: e.event,
+                })
                 .collect(),
             latest_offset: latest,
         })
@@ -297,9 +310,13 @@ impl EventQueryPort for NodePipeline {
             .map_err(map_storage_err)?;
         let s = stream::unfold(sub, |mut sub| async move {
             match sub.next_entry().await {
-                Some(Ok(entry)) => {
-                    Some((Ok(EventEntry { offset: entry.offset.as_u64(), event: entry.event }), sub))
-                }
+                Some(Ok(entry)) => Some((
+                    Ok(EventEntry {
+                        offset: entry.offset.as_u64(),
+                        event: entry.event,
+                    }),
+                    sub,
+                )),
                 Some(Err(e)) => Some((Err(map_storage_err(e)), sub)),
                 None => None,
             }
@@ -340,7 +357,10 @@ mod tests {
             timebase_id: TimebaseId::new("gps-1"),
             source_attestation: SourceAttestation::RuntimeDiscovered,
             sequence_number: 1,
-            sensor: SensorData::LoopTransponder { rssi_dbm: Some(-60), pulse_count: None },
+            sensor: SensorData::LoopTransponder {
+                rssi_dbm: Some(-60),
+                pulse_count: None,
+            },
         }
     }
 
@@ -390,7 +410,11 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(outcome, AppendOutcome::DroppedDuplicate));
-        assert_eq!(pipeline.latest_offset().await.unwrap(), Some(0), "log must not grow on duplicate");
+        assert_eq!(
+            pipeline.latest_offset().await.unwrap(),
+            Some(0),
+            "log must not grow on duplicate"
+        );
     }
 
     #[tokio::test]
@@ -415,7 +439,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let pipeline = pipeline_in(&tmp).await;
         assert!(pipeline.latest_offset().await.unwrap().is_none());
-        pipeline.append_event("p", OtkEvent::Detection(make_detection_with_seq(1))).await.unwrap();
+        pipeline
+            .append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
+            .await
+            .unwrap();
         assert_eq!(pipeline.latest_offset().await.unwrap(), Some(0));
     }
 
@@ -423,8 +450,14 @@ mod tests {
     async fn read_events_returns_appended() {
         let tmp = tempfile::tempdir().unwrap();
         let pipeline = pipeline_in(&tmp).await;
-        pipeline.append_event("p", OtkEvent::Detection(make_detection_with_seq(1))).await.unwrap();
-        pipeline.append_event("p", OtkEvent::Detection(make_detection_with_seq(2))).await.unwrap();
+        pipeline
+            .append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
+            .await
+            .unwrap();
+        pipeline
+            .append_event("p", OtkEvent::Detection(make_detection_with_seq(2)))
+            .await
+            .unwrap();
         let page = pipeline.read_events(0, 10).await.unwrap();
         assert_eq!(page.entries.len(), 2);
         assert_eq!(page.entries[0].offset, 0);

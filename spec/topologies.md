@@ -22,7 +22,7 @@ sensor / loop / RF / firmware
         |
         v
 embedded native detector adapter
-  (otk-core's `event-model` + `otk-protocol` + `frame-codec`, all `no_std` + `alloc`)
+  (the workspace's `event-model` + `otk-protocol` + `frame-codec`, all `no_std` + `alloc`)
         |
         v   OTK frames
         v   (over USB CDC, TCP, UART, ... depending on the device)
@@ -33,7 +33,7 @@ timing-node ingest listener
 canonical ingest pipeline
 ```
 
-The adapter lives in firmware on the detector device itself. The device implements the adapter role directly: it encodes canonical events using `otk-core`'s `event-model` + `otk-protocol` + `frame-codec` (all `no_std` + `alloc`) and sends OTK frames over whatever transport binding the device supports.
+The adapter lives in firmware on the detector device itself. The device implements the adapter role directly: it encodes canonical events using `event-model` + `otk-protocol` + `frame-codec` (all `no_std` + `alloc`) and sends OTK frames over whatever transport binding the device supports.
 
 A native detector device is **not required to run a TCP stack**. Any supported transport binding (USB CDC, UART, Ethernet, etc.) is sufficient.
 
@@ -54,7 +54,7 @@ external adapter process (Pi / mini-PC / small gateway)
 timing-node ingest listener
 ```
 
-A raw device with a proprietary or proprietary-ish protocol is attached to a small local host. The host runs an adapter process that translates the device-native output into canonical events and publishes OTK frames over a transport binding, typically TCP. The adapter process may use [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk)'s `producer` feature for convenience, or build directly on `otk-core`'s `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
+A raw device with a proprietary or proprietary-ish protocol is attached to a small local host. The host runs an adapter process that translates the device-native output into canonical events and publishes OTK frames over a transport binding, typically TCP. The adapter process may use [`otk-sdk`](../otk-sdk)'s `producer` feature for convenience, or build directly on `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
 
 Best for: existing detector hardware with a proprietary protocol; field-replaceable gateways near each sensor.
 
@@ -122,7 +122,7 @@ many detector producers
 
 A single runtime node ingests from many sources concurrently, across multiple transport bindings. All persistence and APIs live on that one node.
 
-Example listener configuration (TOML, matching `timing-node`'s shipped config format):
+Example listener configuration (TOML, matching `timing-node`'s shipped config format). The `tcp` and `unix-socket` variants ship at v0; the `usb-cdc` variant is **illustrative of the planned multi-binding shape**, not yet implemented by the runtime (`ListenerConfig` will reject it at startup):
 
 ```toml
 [[listeners]]
@@ -131,14 +131,18 @@ transport = "tcp"
 bind_addr = "0.0.0.0:7420"
 
 [[listeners]]
-id        = "start-finish-usb"
-transport = "usb-cdc"
-device    = "/dev/ttyACM0"
-
-[[listeners]]
 id          = "local-adapters"
 transport   = "unix-socket"
 socket_path = "/var/run/otk-node.sock"
+
+# Planned (not yet a v0 ListenerConfig variant): host-attached
+# USB-CDC detectors. The shape below is the intended TOML once the
+# adapter-ingest-usb-cdc crate lands; `timing-node` rejects this
+# variant today.
+# [[listeners]]
+# id        = "start-finish-usb"
+# transport = "usb-cdc"
+# device    = "/dev/ttyACM0"
 ```
 
 Best for: venues with reliable LAN, where centralization simplifies ops.
@@ -163,8 +167,8 @@ The Timing Fabric is the union of all of it.
 
 Regardless of model:
 
-- **Inbound data must be canonical events.** Producers and plugins emit canonical detector events, detector health events, timebase status events, and adapter metadata events as defined in [`otk-core/event-model`](https://github.com/Open-Timekeeping/otk-core/tree/main/event-model).
-- **Cross-process data is OTK frames.** Across any process boundary, canonical events are wrapped in the OTK message envelope and encoded into frames per [`otk-protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/protocol) and [`frame-codec`](https://github.com/Open-Timekeeping/otk-core/tree/main/frame-codec), then carried by a transport binding.
+- **Inbound data must be canonical events.** Producers and plugins emit canonical detector events, detector health events, timebase status events, and adapter metadata events as defined in [`event-model`](../event-model).
+- **Cross-process data is OTK frames.** Across any process boundary, canonical events are wrapped in the OTK message envelope and encoded into frames per [`otk-protocol`](../otk-protocol) and [`frame-codec`](../frame-codec), then carried by a transport binding.
 - **Adapter and timebase identity is registered.** Every producer / plugin announces what it is at startup.
 - **Health is reported continuously.** Detectors and timebases report their own state; the runtime does not invent it.
 - **Sequence numbers persist across reconnects.** Producers that disconnect and return resume cleanly from a known sequence number.

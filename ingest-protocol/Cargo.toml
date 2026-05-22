@@ -7,6 +7,6 @@ description = "Transport-independent OTK ingest protocol state machine: handshak
 
 [dependencies]
 event-model = { workspace = true }
-protocol    = { path = "../otk-protocol", package = "otk-protocol" }
+otk-protocol = { workspace = true }
 minicbor    = { workspace = true, features = ["alloc"] }
 thiserror   = { workspace = true }

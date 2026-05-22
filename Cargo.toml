@@ -18,10 +18,54 @@ members  = [
 ]
 resolver = "2"
 
+# Single source of truth for third-party dependency versions across
+# every workspace member. Members opt in via `{ workspace = true,
+# features = [...] }` and pick whatever feature subset they actually
+# need; this block does not commit anyone to a feature set. Adding a
+# new dep or bumping an existing one is a one-line change.
+#
+# Path deps to other workspace members are also declared here so
+# adding a new member that depends on (say) `event-model` only
+# requires the consumer to write `event-model = { workspace = true }`.
 [workspace.dependencies]
-async-trait = "0.1"
-cobs        = "0.2"
-minicbor    = { version = "0.24", default-features = false }
-thiserror   = "2"
-tokio       = { version = "1" }
-event-model = { path = "event-model" }
+# Third-party libraries.
+async-trait        = "0.1"
+axum               = "0.8"
+cobs               = "0.2"
+crc32fast          = "1"
+futures-util       = "0.3"
+minicbor           = { version = "0.24", default-features = false }
+reqwest            = { version = "0.12", default-features = false }
+# Default-features off so `event-model` (no_std + alloc) can depend on
+# serde without dragging `std` in. Members that need std-based impls
+# (Vec/HashMap/etc. derive, file I/O, etc.) opt in via
+# `features = ["std"]`.
+serde              = { version = "1", default-features = false }
+serde_json         = "1"
+tempfile           = "3"
+thiserror          = "2"
+tokio              = "1"
+toml               = "0.8"
+tower-http         = "0.6"
+tracing            = "0.1"
+tracing-subscriber = "0.3"
+uuid               = "1"
+
+# Intra-workspace path deps. Members that need any of these declare
+# `<name> = { workspace = true }` (plus optional `features = [...]`,
+# `optional = true`, or `package = "..."` as needed).
+adapter-event-log-segment  = { path = "adapter-event-log-segment" }
+adapter-ingest-tcp         = { path = "adapter-ingest-tcp" }
+adapter-ingest-unix-socket = { path = "adapter-ingest-unix-socket" }
+event-model                = { path = "event-model" }
+frame-codec                = { path = "frame-codec" }
+ingest-protocol            = { path = "ingest-protocol" }
+otk-contracts              = { path = "otk-contracts" }
+otk-protocol               = { path = "otk-protocol" }
+# Default-features off so consumers explicitly pick "client" /
+# "producer" / both. `otk-sdk` itself ships with `default = ["client"]`,
+# which the workspace pin would silently include otherwise.
+otk-sdk                    = { path = "otk-sdk", default-features = false }
+port-in-ingest             = { path = "port-in-ingest" }
+port-out-event-log         = { path = "port-out-event-log" }
+timing-core                = { path = "timing-core" }

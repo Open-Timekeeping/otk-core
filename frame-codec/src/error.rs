@@ -18,18 +18,24 @@ pub enum FrameError {
     /// valid (correct length / CRC) but its contents could not be parsed as
     /// an [`OtkEnvelope`].
     ///
-    /// [`OtkEnvelope`]: protocol::OtkEnvelope
+    /// [`OtkEnvelope`]: otk_protocol::OtkEnvelope
     DecodeFailed(decode::Error),
 }
 
 impl core::fmt::Display for FrameError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::OversizeFrame { len: Some(len), max } => {
+            Self::OversizeFrame {
+                len: Some(len),
+                max,
+            } => {
                 write!(f, "frame too large: {len} bytes exceeds maximum of {max}")
             }
             Self::OversizeFrame { len: None, max } => {
-                write!(f, "frame too large: exceeded maximum of {max} bytes before delimiter")
+                write!(
+                    f,
+                    "frame too large: exceeded maximum of {max} bytes before delimiter"
+                )
             }
             Self::CorruptFrame => f.write_str("corrupt frame: CRC-16/CCITT-FALSE mismatch"),
             Self::LostSync => f.write_str("lost sync: COBS decoding failed"),

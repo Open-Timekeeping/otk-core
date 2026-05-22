@@ -18,22 +18,20 @@ Concretely, this crate owns:
 - `OtkMessage`: the decoded, typed form of an envelope payload.
 - Protocol semantics: version negotiation, error-only ack model, sequence-number field and error vocabulary enabling gap detection by producers and servers.
 
-This crate does **not** own frame encoding (length-prefix, COBS, CRC); that is internal to each side's transport implementation. It does **not** own transport mechanics; those are in `server/adapters/adapter-ingest-tcp` (server side) and `sdk/otk-sdk` (producer side).
+This crate does **not** own frame encoding (length-prefix, COBS, CRC); that lives in [`frame-codec`](../frame-codec). It does **not** own transport mechanics; those are in [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket) (server side) and [`otk-sdk`](../otk-sdk)'s producer feature (producer side).
 
 ## Where this sits in the architecture
 
 ```text
-server/
-  core/
-    event-model/     domain DTOs (Detection, OtkEvent, ...)
-    protocol/        wire DTOs (OtkEnvelope, MessageType, ...)   <-- this repo
-    timing-core/     business logic
-  ports/
-    port-in-ingest/  typed ingest port contract
-  adapters/
-    adapter-ingest-tcp/  decodes protocol -> OtkEvent, implements port-in-ingest
-sdk/
-  otk-sdk/           producer feature: encodes OtkEvent -> protocol
+event-model/                domain DTOs (Detection, OtkEvent, ...)
+otk-protocol/               wire DTOs (OtkEnvelope, MessageType, ...)   <-- this crate
+frame-codec/                encode/decode envelopes into byte frames
+ingest-protocol/            server-side handshake + dispatch state machine
+timing-core/                domain engine
+port-in-ingest/             typed ingest port contract
+adapter-ingest-tcp/         decodes frames -> OtkEvent, implements port-in-ingest
+adapter-ingest-unix-socket/ same, over AF_UNIX
+otk-sdk/                    producer feature: encodes OtkEvent -> otk-protocol
 ```
 
 The same message envelope is used whether the producer speaks OTK over TCP, serial, or USB CDC.
@@ -73,7 +71,7 @@ src/
 
 **Depends on:** [`event-model`](../event-model) (for `StreamId`, `StreamDescriptor`, and `OtkEvent` in `OtkMessage`).
 
-**Used by:** `server/adapters/adapter-ingest-tcp` (server-side decode), `sdk/otk-sdk` producer feature (producer-side encode).
+**Used by:** [`adapter-ingest-tcp`](../adapter-ingest-tcp) and [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket) (server-side decode), [`otk-sdk`](../otk-sdk)'s producer feature (producer-side encode), and [`ingest-protocol`](../ingest-protocol) (handshake state machine that consumes these DTOs).
 
 ## Open questions
 

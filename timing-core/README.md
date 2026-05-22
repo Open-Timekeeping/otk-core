@@ -1,6 +1,6 @@
 # timing-core
 
-The timing-domain engine. Converts raw [`Detection`](https://github.com/Open-Timekeeping/event-model) events into `Crossing` events.
+The timing-domain engine. Converts raw [`Detection`](../event-model) events into `Crossing` events.
 
 > **Status: active.**
 
@@ -8,7 +8,7 @@ The timing-domain engine. Converts raw [`Detection`](https://github.com/Open-Tim
 
 A pure library that takes raw canonical detector events and turns them into timing-domain meaning. Its v0 scope is detection-to-crossing grouping: the process of merging multiple detections for the same subject at the same timing point (from redundant sensors, multi-loop readers, etc.) into a single authoritative passage record.
 
-`timing-core` is a library, not a server. It is consumed by [`timing-node`](https://github.com/Open-Timekeeping/timing-node), but is reusable from any host that wants to apply Open Timekeeping timing logic to a stream of canonical events: an offline analyzer, a test harness, a re-projection tool.
+`timing-core` is a library, not a server. It is consumed by [`timing-node`](../timing-node), but is reusable from any host that wants to apply Open Timekeeping timing logic to a stream of canonical events: an offline analyzer, a test harness, a re-projection tool.
 
 ## Domain scope
 
@@ -74,9 +74,9 @@ for crossing in processor.flush() {
 
 ## Dependencies
 
-**Depends on:** [`event-model`](https://github.com/Open-Timekeeping/event-model).
+**Depends on:** [`event-model`](../event-model).
 
-**Commonly depended on by:** [`timing-node`](https://github.com/Open-Timekeeping/timing-node), offline analysis tools, [`conformance`](https://github.com/Open-Timekeeping/conformance).
+**Commonly depended on by:** [`timing-node`](../timing-node), offline analysis tools, [`conformance`](../conformance).
 
 ## License
 

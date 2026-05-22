@@ -4,6 +4,20 @@
 use reqwest::Client;
 use timing_node::{ApiConfig, AuthConfig, ListenerConfig, Node, NodeConfig};
 
+/// HTTP client used for every integration assertion in this file.
+/// Carries a request timeout so a node that fails to bind or fails to
+/// respond can't hang the test indefinitely; `cargo test`'s parallel
+/// runner would otherwise hold the whole suite open until the OS
+/// killed the process. 5 s is well beyond any legitimate localhost
+/// response time but short enough that a failing test fails
+/// deterministically.
+fn timeout_client() -> Client {
+    Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .expect("reqwest Client builds with timeout")
+}
+
 /// Signal shutdown and drain the spawned tasks with a timeout so background
 /// workers don't outlive a test under cargo's parallel runner. Asserts on
 /// both the timeout AND the join result so a panic in a background task
@@ -52,7 +66,7 @@ async fn healthz_and_readyz_return_ok_unauthenticated() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let (ingest, api) = node.run_with_shutdown(shutdown_rx);
 
-    let client = Client::new();
+    let client = timeout_client();
     let healthz = client
         .get(format!("http://{api_addr}/healthz"))
         .send()
@@ -77,7 +91,7 @@ async fn metrics_endpoint_returns_prometheus_text() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let (ingest, api) = node.run_with_shutdown(shutdown_rx);
 
-    let body = Client::new()
+    let body = timeout_client()
         .get(format!("http://{api_addr}/metrics"))
         .send()
         .await
@@ -104,7 +118,7 @@ async fn api_requires_bearer_token_when_configured() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let (ingest, api) = node.run_with_shutdown(shutdown_rx);
 
-    let client = Client::new();
+    let client = timeout_client();
 
     // No header → 401.
     let no_token = client

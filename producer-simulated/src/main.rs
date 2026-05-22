@@ -1,5 +1,5 @@
-use producer_simulated::{config::load_from_file, runner, SimulatorAdapter, SimulatorConfig};
 use otk_sdk::producer::{ProducerConfig, Transport};
+use producer_simulated::{config::load_from_file, runner, SimulatorAdapter, SimulatorConfig};
 use tracing::info;
 
 #[tokio::main]
@@ -22,7 +22,12 @@ async fn main() {
 
     let adapter = SimulatorAdapter::new(sim_config);
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    let mut handle = tokio::spawn(runner::run(adapter, transport, producer_config, shutdown_rx));
+    let mut handle = tokio::spawn(runner::run(
+        adapter,
+        transport,
+        producer_config,
+        shutdown_rx,
+    ));
 
     tokio::select! {
         result = &mut handle => {

@@ -156,7 +156,9 @@ impl LabeledCounter {
             }
             return;
         }
-        w.entry(key).or_insert_with(|| AtomicU64::new(0)).fetch_add(1, Ordering::Relaxed);
+        w.entry(key)
+            .or_insert_with(|| AtomicU64::new(0))
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     fn render(&self, out: &mut String, name: &str, kind: &str, help: &str) {
@@ -174,7 +176,11 @@ impl LabeledCounter {
                 // supposed to be a non-negative integer; a negative value
                 // is "invalid counter" per the exposition format and
                 // breaks scrapers).
-                out.push_str(&render_series(name, labels, &counter.load(Ordering::Relaxed)));
+                out.push_str(&render_series(
+                    name,
+                    labels,
+                    &counter.load(Ordering::Relaxed),
+                ));
             }
         }
         // Cardinality-cap overflow is rendered as a SEPARATE metric name
@@ -222,7 +228,9 @@ impl LabeledGauge {
             }
             return;
         }
-        w.entry(key).or_insert_with(|| AtomicI64::new(0)).fetch_add(delta, Ordering::Relaxed);
+        w.entry(key)
+            .or_insert_with(|| AtomicI64::new(0))
+            .fetch_add(delta, Ordering::Relaxed);
     }
 
     pub fn inc(&self, labels: &[(&str, &str)]) {
@@ -318,9 +326,12 @@ mod tests {
     #[test]
     fn counter_renders_with_labels() {
         let m = Metrics::new();
-        m.events_appended.incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
-        m.events_appended.incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
-        m.events_appended.incr(&[("producer_id", "p2"), ("event_kind", "Crossing")]);
+        m.events_appended
+            .incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
+        m.events_appended
+            .incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
+        m.events_appended
+            .incr(&[("producer_id", "p2"), ("event_kind", "Crossing")]);
         let text = m.render();
         assert!(text.contains("# TYPE otk_events_appended_total counter"));
         // Labels are emitted in canonical (sorted-by-name) order, so
@@ -333,9 +344,8 @@ mod tests {
             ),
             "rendered:\n{text}"
         );
-        assert!(text.contains(
-            "otk_events_appended_total{event_kind=\"Crossing\",producer_id=\"p2\"} 1"
-        ));
+        assert!(text
+            .contains("otk_events_appended_total{event_kind=\"Crossing\",producer_id=\"p2\"} 1"));
     }
 
     #[test]
@@ -382,16 +392,34 @@ mod tests {
         counter.incr(&[("producer_id", "p_overflow_b")]);
         let mut out = String::new();
         counter.render(&mut out, "otk_test_total", "counter", "test");
-        assert!(!out.contains("series=\"_overflow\""), "must not use sentinel label:\n{out}");
-        assert!(out.contains("# HELP otk_test_overflow_total"), "missing HELP:\n{out}");
-        assert!(out.contains("# TYPE otk_test_overflow_total counter"), "missing TYPE:\n{out}");
-        assert!(out.contains("otk_test_overflow_total 2"), "wrong overflow count:\n{out}");
+        assert!(
+            !out.contains("series=\"_overflow\""),
+            "must not use sentinel label:\n{out}"
+        );
+        assert!(
+            out.contains("# HELP otk_test_overflow_total"),
+            "missing HELP:\n{out}"
+        );
+        assert!(
+            out.contains("# TYPE otk_test_overflow_total counter"),
+            "missing TYPE:\n{out}"
+        );
+        assert!(
+            out.contains("otk_test_overflow_total 2"),
+            "wrong overflow count:\n{out}"
+        );
     }
 
     #[test]
     fn overflow_metric_name_appends_or_splices_total() {
-        assert_eq!(overflow_metric_name("otk_events_appended_total"), "otk_events_appended_overflow_total");
-        assert_eq!(overflow_metric_name("otk_ingest_sessions_active"), "otk_ingest_sessions_active_overflow");
+        assert_eq!(
+            overflow_metric_name("otk_events_appended_total"),
+            "otk_events_appended_overflow_total"
+        );
+        assert_eq!(
+            overflow_metric_name("otk_ingest_sessions_active"),
+            "otk_ingest_sessions_active_overflow"
+        );
     }
 
     #[test]
@@ -399,7 +427,10 @@ mod tests {
         let m = Metrics::new();
         m.events_appended.incr(&[("producer_id", r#"weird"name"#)]);
         let text = m.render();
-        assert!(text.contains(r#"producer_id="weird\"name""#), "got:\n{text}");
+        assert!(
+            text.contains(r#"producer_id="weird\"name""#),
+            "got:\n{text}"
+        );
     }
 
     #[test]
@@ -407,8 +438,10 @@ mod tests {
         // Prometheus treats {a="1",b="2"} and {b="2",a="1"} as the same
         // series, so both call orderings must hit a single counter.
         let m = Metrics::new();
-        m.events_appended.incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
-        m.events_appended.incr(&[("event_kind", "Detection"), ("producer_id", "p1")]);
+        m.events_appended
+            .incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
+        m.events_appended
+            .incr(&[("event_kind", "Detection"), ("producer_id", "p1")]);
         let text = m.render();
         // The rendered series is canonical (sorted by label name), and
         // it shows a count of 2 because both increments folded into one
@@ -428,16 +461,16 @@ mod tests {
         // Simulate that with a direct atomic store; cheap and avoids
         // calling incr() one billion times.
         let m = Metrics::new();
-        let labels: Vec<(String, String)> =
-            vec![("producer_id".into(), "p1".into()), ("event_kind".into(), "Detection".into())];
+        let labels: Vec<(String, String)> = vec![
+            ("producer_id".into(), "p1".into()),
+            ("event_kind".into(), "Detection".into()),
+        ];
         // Pre-seed the series via a normal incr so the entry exists, then
         // crank the underlying atomic past i64::MAX.
-        m.events_appended.incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
+        m.events_appended
+            .incr(&[("producer_id", "p1"), ("event_kind", "Detection")]);
         {
-            let canonical = canonical_labels(&[
-                ("producer_id", "p1"),
-                ("event_kind", "Detection"),
-            ]);
+            let canonical = canonical_labels(&[("producer_id", "p1"), ("event_kind", "Detection")]);
             let map = m.events_appended.series.read().unwrap();
             let atom = map.get(&canonical).expect("series exists");
             atom.store(u64::MAX - 1, Ordering::Relaxed);
@@ -461,7 +494,8 @@ mod tests {
         // must all be escaped. Earlier versions missed CR, which let a
         // malformed producer_id break an entire scrape.
         let m = Metrics::new();
-        m.events_appended.incr(&[("producer_id", "carriage\rreturn\nand\\back")]);
+        m.events_appended
+            .incr(&[("producer_id", "carriage\rreturn\nand\\back")]);
         let text = m.render();
         assert!(
             text.contains(r#"producer_id="carriage\rreturn\nand\\back""#),

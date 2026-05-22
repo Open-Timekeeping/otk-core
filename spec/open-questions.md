@@ -6,18 +6,18 @@ Unresolved technical decisions, tracked here so we stop guessing and decide deli
 
 ## OTK Protocol stack
 
-The OTK Protocol is split across four layers, three of which live as crates inside [`otk-core`](https://github.com/Open-Timekeeping/otk-core) (`event-model`, `otk-protocol`, `frame-codec`); the fourth (transport binding) lives in per-transport adapter repos (`adapter-ingest-tcp`, `adapter-ingest-unix-socket`, …).
+The OTK Protocol is split across four layers, three of which live as crates in this workspace (`event-model`, `otk-protocol`, `frame-codec`); the fourth (transport binding) lives in per-transport adapter crates (`adapter-ingest-tcp`, `adapter-ingest-unix-socket`, …).
 
-### Wire protocol, `otk-core/protocol` (crate `otk-protocol`)
+### Wire protocol, `otk-protocol` (crate `otk-protocol`)
 
 - **Backward-compatibility policy across protocol versions.** The handshake now performs version negotiation; what's the long-term shape for breaking vs additive protocol revisions?
 - **In-process plugin path: does it use the same envelope (for testability symmetry) or skip the envelope and use direct trait calls?**
 
 Resolved:
 - Serialization format: CBOR via `minicbor`. Single format across embedded firmware and server.
-- Handshake / registration message shape: `Connect` / `ConnectAck` / `ConnectReject` envelopes carrying CBOR-encoded payloads, with optional `auth_token` field on `Connect`. (Defined in [`otk-core/protocol/src/handshake.rs`](https://github.com/Open-Timekeeping/otk-core/blob/main/protocol/src/handshake.rs).)
+- Handshake / registration message shape: `Connect` / `ConnectAck` / `ConnectReject` envelopes carrying CBOR-encoded payloads, with optional `auth_token` field on `Connect`. (Defined in [`otk-protocol/src/handshake.rs`](../otk-protocol/src/handshake.rs).)
 
-### Frame codec, `otk-core/frame-codec`
+### Frame codec, `frame-codec`
 
 Resolved:
 - Stream framing for reliable transports: length-prefixed (`u32` BE). Implemented in `StreamFrameDecoder`.
@@ -33,9 +33,9 @@ Open:
 - **WebSocket as a separate binding** for browser-debuggable producers, or out of scope at the producer layer entirely.
 
 Resolved:
-- Common abstraction shape: [`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest)'s `EventIngestPort` + `IngestSession` traits. Handshake and post-handshake dispatch reusable via [`ingest-protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/ingest-protocol).
+- Common abstraction shape: [`port-in-ingest`](../port-in-ingest)'s `EventIngestPort` + `IngestSession` traits. Handshake and post-handshake dispatch reusable via [`ingest-protocol`](../ingest-protocol).
 
-## Event model, `otk-core/event-model`
+## Event model, `event-model`
 
 - **Uncertainty model.** Bounded interval, standard deviation, or distribution-aware?
 - **`detected_at` vs `received_at` semantics.** Which is required vs optional on each event class? When can `detected_at` be omitted?
@@ -47,7 +47,7 @@ Resolved:
 - Event shape: single `Detection` type. The stream (topic) carries the resolution level, not the type. `SensorData` enum on `Detection` handles sensor-specific fields without spurious nullables.
 - Sequence-number scope: per-`(producer_id, detector_id)`. Enforced at runtime by the `SequenceGate` middleware in `timing-node`.
 
-## Detector adapter / timebase contracts, `otk-core/otk-contracts`
+## Detector adapter / timebase contracts, `otk-contracts`
 
 - **Required-vs-optional sub-traits for capability tiers** (raw-hits-only, passings-only, hits-and-passings, replay-only, manual-only).
 - **Minimum health-reporting cadence.**
@@ -91,7 +91,7 @@ Resolved:
 
 ## Storage, `port-out-event-log` and `adapter-event-log-segment`
 
-The v0 backend is a custom segment-file log ([`adapter-event-log-segment`](https://github.com/Open-Timekeeping/adapter-event-log-segment)). Storage stays pluggable behind [`port-out-event-log`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-out-event-log); alternative backends (embedded SQL, server SQL, object-store-tiered) can be added behind the same trait when there is a concrete need.
+The v0 backend is a custom segment-file log ([`adapter-event-log-segment`](../adapter-event-log-segment)). Storage stays pluggable behind [`port-out-event-log`](../port-out-event-log); alternative backends (embedded SQL, server SQL, object-store-tiered) can be added behind the same trait when there is a concrete need.
 
 - **Background fsync task.** Per-`append` `sync_all()` is the default. Setting `flush_interval_ms > 0` skips fsync and currently has no timer-based safety net; a background flusher is planned.
 - **Time index.** Index by `appended_at_ns` for timestamp-range reads. Deferred until `port-out-event-log` adds a timestamp-range read variant.

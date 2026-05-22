@@ -11,17 +11,25 @@
 pub mod adapter;
 pub mod builder;
 pub mod error;
+// The producer::producer naming is intentional: `Producer` is the headline
+// type of this submodule. mod.rs re-exports it as `producer::Producer`, so
+// callers never type `producer::producer::Producer`.
+#[allow(clippy::module_inception)]
 pub mod producer;
 pub mod seq;
-pub mod timebase;
 pub mod time;
+pub mod timebase;
 pub mod transport;
 
-pub use adapter::{adapter_event_to_otk, AdapterError, AdapterEvent, AdapterState, DetectorAdapter};
+pub use adapter::{
+    adapter_event_to_otk, AdapterError, AdapterEvent, AdapterState, DetectorAdapter,
+};
 pub use builder::{DetectionBuilder, HealthEventBuilder, MetadataBuilder};
 pub use error::ProducerError;
 pub use producer::{Producer, ProducerConfig};
 pub use seq::SequenceCounter;
-pub use timebase::{Timebase, TimebaseError, TimebaseEvent, TimebaseKind, TimebaseMetadataEvent, TimebaseState};
 pub use time::now_ns;
+pub use timebase::{
+    Timebase, TimebaseError, TimebaseEvent, TimebaseKind, TimebaseMetadataEvent, TimebaseState,
+};
 pub use transport::Transport;

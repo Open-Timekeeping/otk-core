@@ -33,7 +33,7 @@ impl SegmentHeader {
         buf[0..4].copy_from_slice(&MAGIC);
         buf[4] = VERSION;
         buf[5] = 0; // flags
-        // buf[6..8] padding = 0
+                    // buf[6..8] padding = 0
         buf[8..16].copy_from_slice(&h.base_offset.to_le_bytes());
         buf[16..24].copy_from_slice(&h.created_at_ns.to_le_bytes());
         file.write_all(&buf).await?;
@@ -236,7 +236,10 @@ const MAX_INDEX_BYTES: usize = 256 * 1024 * 1024;
 /// Read an offset index file into a `Vec<u64>`.
 pub async fn read_index(path: &Path) -> Result<Vec<u64>, StorageError> {
     // Stat first so a corrupt or huge .idx cannot cause an unbounded allocation.
-    let file_len = tokio::fs::metadata(path).await.map_err(StorageError::Io)?.len();
+    let file_len = tokio::fs::metadata(path)
+        .await
+        .map_err(StorageError::Io)?
+        .len();
     if file_len > MAX_INDEX_BYTES as u64 {
         return Err(StorageError::Corrupted(format!(
             "index file {} is {} bytes, exceeding the {MAX_INDEX_BYTES}-byte limit",
@@ -307,13 +310,14 @@ pub async fn recover_active(
                 // Verify the logical offset stored in the record matches the
                 // position we expect. A mismatch means two segment files were
                 // concatenated or the file was otherwise corrupted.
-                let expected = base_offset
-                    .checked_add(positions.len() as u64)
-                    .ok_or_else(|| {
-                        StorageError::Corrupted(format!(
-                            "segment base_offset {base_offset} + record count overflows u64"
-                        ))
-                    })?;
+                let expected =
+                    base_offset
+                        .checked_add(positions.len() as u64)
+                        .ok_or_else(|| {
+                            StorageError::Corrupted(format!(
+                                "segment base_offset {base_offset} + record count overflows u64"
+                            ))
+                        })?;
                 if entry.offset.as_u64() != expected {
                     file.set_len(pos).await?;
                     file.seek(SeekFrom::Start(pos)).await?;
@@ -356,9 +360,8 @@ pub async fn recover_active(
 mod tests {
     use super::*;
     use event_model::{
-        Detection, DetectionId, DetectorId, OtkEvent, SourceAttestation, TimestampingMethod,
-        TimebaseId, TimingPointId,
-        detection::SensorData,
+        detection::SensorData, Detection, DetectionId, DetectorId, OtkEvent, SourceAttestation,
+        TimebaseId, TimestampingMethod, TimingPointId,
     };
     use tempfile::tempdir;
     use tokio::fs::OpenOptions;
@@ -418,7 +421,10 @@ mod tests {
         let read_back = read_record(&mut file, record_pos).await.unwrap();
         assert_eq!(read_back.offset, entry.offset);
         assert_eq!(read_back.appended_at_ns, entry.appended_at_ns);
-        assert_eq!(format!("{:?}", read_back.event), format!("{:?}", entry.event));
+        assert_eq!(
+            format!("{:?}", read_back.event),
+            format!("{:?}", entry.event)
+        );
     }
 
     #[tokio::test]
@@ -427,7 +433,10 @@ mod tests {
         let seg_path = dir.path().join("test.seg");
         let mut file = open_rw(&seg_path).await;
 
-        let header = SegmentHeader { base_offset: 0, created_at_ns: 0 };
+        let header = SegmentHeader {
+            base_offset: 0,
+            created_at_ns: 0,
+        };
         SegmentHeader::write(&mut file, &header).await.unwrap();
 
         let entry = make_entry(0);
@@ -462,7 +471,10 @@ mod tests {
         let seg_path = dir.path().join("test.seg");
         let mut file = open_rw(&seg_path).await;
 
-        let header = SegmentHeader { base_offset: 0, created_at_ns: 0 };
+        let header = SegmentHeader {
+            base_offset: 0,
+            created_at_ns: 0,
+        };
         SegmentHeader::write(&mut file, &header).await.unwrap();
 
         write_record(&mut file, &make_entry(0)).await.unwrap();
@@ -471,19 +483,27 @@ mod tests {
 
         // Truncate 5 bytes into the second record (well past the boundary)
         let torn_pos = second_pos + 5;
-        assert!(torn_pos < full_len, "torn_pos must be inside the second record");
+        assert!(
+            torn_pos < full_len,
+            "torn_pos must be inside the second record"
+        );
         file.set_len(torn_pos).await.unwrap();
 
-        let (positions, next_file_pos, record_count) =
-            recover_active(&mut file, 0).await.unwrap();
+        let (positions, next_file_pos, record_count) = recover_active(&mut file, 0).await.unwrap();
 
-        assert_eq!(record_count, 1, "should have recovered only the first record");
+        assert_eq!(
+            record_count, 1,
+            "should have recovered only the first record"
+        );
         assert_eq!(positions.len(), 1);
         assert_eq!(positions[0], HEADER_LEN);
 
         let file_len = file.metadata().await.unwrap().len();
         assert_eq!(file_len, next_file_pos);
-        assert!(file_len < torn_pos, "file should be truncated back past the torn point");
+        assert!(
+            file_len < torn_pos,
+            "file should be truncated back past the torn point"
+        );
     }
 
     #[tokio::test]
@@ -492,7 +512,10 @@ mod tests {
         let seg_path = dir.path().join("test.seg");
         let mut file = open_rw(&seg_path).await;
 
-        let header = SegmentHeader { base_offset: 0, created_at_ns: 0 };
+        let header = SegmentHeader {
+            base_offset: 0,
+            created_at_ns: 0,
+        };
         SegmentHeader::write(&mut file, &header).await.unwrap();
 
         let record_pos = write_record(&mut file, &make_entry(0)).await.unwrap();
@@ -501,8 +524,7 @@ mod tests {
         // Write zero sentinel (as if a roll was interrupted before the .idx was written)
         file.write_all(&0u32.to_le_bytes()).await.unwrap();
 
-        let (positions, next_file_pos, record_count) =
-            recover_active(&mut file, 0).await.unwrap();
+        let (positions, next_file_pos, record_count) = recover_active(&mut file, 0).await.unwrap();
 
         assert_eq!(record_count, 1);
         assert_eq!(positions[0], record_pos);

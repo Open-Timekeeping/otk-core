@@ -22,7 +22,9 @@ pub struct EventPage {
 /// Storage errors are mapped to these variants at the pipeline boundary.
 #[derive(Debug, thiserror::Error)]
 pub enum QueryError {
-    #[error("requested offset {requested} is not available (earliest_available={earliest_available:?})")]
+    #[error(
+        "requested offset {requested} is not available (earliest_available={earliest_available:?})"
+    )]
     RetentionExpired {
         requested: u64,
         earliest_available: Option<u64>,

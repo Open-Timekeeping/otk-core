@@ -32,21 +32,26 @@ runner::run(adapter, transport, producer_config, shutdown_rx).await?;
 
 ## Dependencies
 
-**Depends on:** [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk) (producer feature only).
+**Depends on:** [`otk-sdk`](../otk-sdk) (producer feature only).
 
 **Does not depend on:** any server-side port, adapter, or timing-node crate.
 
 ## Development
 
-This crate uses a sibling-relative path dep to `otk-sdk`:
+This crate is a member of the workspace at the repository root and depends on `otk-sdk` via an intra-workspace path:
 
 ```toml
 otk-sdk = { path = "../otk-sdk", default-features = false, features = ["producer"] }
 ```
 
-Local development expects the standard Open Timekeeping workspace layout: each repo cloned as a sibling under one parent directory (so `../otk-sdk` resolves alongside this crate). From a fresh single-repo clone, `cargo build` will fail until `otk-sdk` is present alongside it.
+Build and test from the workspace root:
 
-Once `otk-sdk` publishes to crates.io, the dep will switch to a versioned crates.io spec with an optional `[patch]` override for local sibling development (the cargo-native way to support both standalone and workspace builds).
+```bash
+cargo build -p producer-simulated
+cargo test  -p producer-simulated
+```
+
+When the contract crates eventually publish to crates.io, the path deps in this workspace can switch to `version = "x.y"` with a workspace-level `[patch.crates-io]` block for local development.
 
 ## License
 

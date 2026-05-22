@@ -15,16 +15,20 @@ The SDK re-exports `event-model` types so dependents need only add `otk-sdk` to 
 
 ## Feature selection
 
-```toml
-# Consumer only (default)
-otk-sdk = { git = "https://github.com/Open-Timekeeping/otk-sdk" }
+Within this Cargo workspace, depend on `otk-sdk` via a path dep and pick the feature set that matches your role:
 
-# Producer only (excludes HTTP client code)
-otk-sdk = { git = "...", default-features = false, features = ["producer"] }
+```toml
+# Consumer only (default: `client` feature)
+otk-sdk = { path = "../otk-sdk" }
+
+# Producer only (excludes the HTTP/SSE consumer client)
+otk-sdk = { path = "../otk-sdk", default-features = false, features = ["producer"] }
 
 # Both roles
-otk-sdk = { git = "...", features = ["producer"] }
+otk-sdk = { path = "../otk-sdk", features = ["producer"] }
 ```
+
+For external consumers depending on a published version (once `otk-sdk` lands on crates.io), substitute `path = "../otk-sdk"` with `version = "x.y"`.
 
 ## Producer usage
 
@@ -95,20 +99,24 @@ impl DetectorAdapter for MyDetector {
 ## Where this sits in the architecture
 
 ```text
-sdk/
-  otk-sdk/               this repo: consumer default, producer opt-in
+contract crates (no_std + alloc where applicable)
+  event-model/           re-exported by otk-sdk
+  otk-protocol/          used internally by producer feature (not re-exported)
+  otk-contracts/         DetectorAdapter + Timebase traits, re-exported by otk-sdk
 
-producers/
-  simulator/             uses otk-sdk producer feature
+sdk
+  otk-sdk/               this crate: consumer default, producer opt-in
 
-server/
-  core/event-model/      re-exported by otk-sdk
-  core/protocol/         used internally by producer feature (not re-exported)
+reference producer
+  producer-simulated/    uses otk-sdk producer feature
+
+runtime
+  timing-node/           hosts ingest listeners; does not depend on otk-sdk
 ```
 
 The SDK does not depend on any server-side ports or adapters. The only shared
-dependencies with the server are `event-model` (always) and `protocol` (producer
-feature only, for wire encoding).
+dependencies with the runtime are `event-model` (always) and `otk-protocol`
+(producer feature only, for wire encoding).
 
 ## Dependencies
 

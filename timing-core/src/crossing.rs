@@ -1,4 +1,6 @@
-use event_model::{DetectionId, SourceAttestation, SubjectId, TimebaseId, TimestampingMethod, TimingPointId};
+use event_model::{
+    DetectionId, SourceAttestation, SubjectId, TimebaseId, TimestampingMethod, TimingPointId,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CrossingId(String);

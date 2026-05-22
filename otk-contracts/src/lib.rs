@@ -39,7 +39,9 @@ extern crate std;
 pub mod adapter;
 pub mod timebase;
 
-pub use adapter::{adapter_event_to_otk, AdapterError, AdapterEvent, AdapterState, DetectorAdapter};
+pub use adapter::{
+    adapter_event_to_otk, AdapterError, AdapterEvent, AdapterState, DetectorAdapter,
+};
 pub use timebase::{
     Timebase, TimebaseError, TimebaseEvent, TimebaseKind, TimebaseMetadataEvent, TimebaseState,
 };

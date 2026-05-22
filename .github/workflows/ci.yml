@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# `rust-toolchain.toml` at the repo root pins the channel + components.
+# Each job runs `rustup show` first; that command reads the file and
+# installs the named toolchain + components on demand, so CI and local
+# builds stay in sync without churning this file every time we bump.
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Format check is fast and target-independent; runs first as a gate
+  # so the slower jobs don't burn runner minutes on a PR that hasn't
+  # been formatted.
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - run: cargo fmt --all -- --check
+
+  # Lints + tests on Linux. adapter-ingest-unix-socket is cfg(unix), so
+  # this exercises the full crate set including the AF_UNIX listener
+  # and its AF_UNIX-specific integration tests. `--locked` ensures CI
+  # uses exactly the committed Cargo.lock; if a PR adds a dep without
+  # updating the lockfile, CI fails here rather than silently passing.
+  linux:
+    name: clippy + test (linux)
+    runs-on: ubuntu-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test  --workspace --all-targets --locked
+
+  # Lints + tests on Windows. Confirms the workspace still builds (and
+  # tests still pass) without the cfg(unix)-gated unix-socket adapter,
+  # and that Windows-specific code paths (e.g. the cfg(not(unix))
+  # rejection branch in Node::new) pass clippy. Catches accidental
+  # Linux-only deps or cfg drift in core / runtime crates.
+  windows:
+    name: clippy + test (windows)
+    runs-on: windows-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test  --workspace --all-targets --locked
+
+  # Rustdoc with -D warnings catches broken intra-doc links, missing
+  # link targets, and other rustdoc issues that don't surface from
+  # cargo test / clippy. Runs on Linux only; rustdoc output is the
+  # same across targets.
+  docs:
+    name: cargo doc
+    runs-on: ubuntu-latest
+    needs: fmt
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps --locked
