@@ -30,6 +30,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "adapter-ingest-unix-socket"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "event-model",
+ "frame-codec",
+ "ingest-protocol",
+ "minicbor",
+ "otk-protocol",
+ "port-in-ingest",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
