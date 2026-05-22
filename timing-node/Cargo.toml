@@ -1,0 +1,43 @@
+[package]
+name        = "timing-node"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Open Timekeeping runtime node. Binary: otk-node."
+
+[[bin]]
+name = "otk-node"
+path = "src/main.rs"
+
+[dependencies]
+event-model               = { path = "../event-model", features = ["serde"] }
+protocol                  = { path = "../otk-protocol", package = "otk-protocol" }
+ingest-protocol           = { path = "../ingest-protocol" }
+port-in-ingest            = { path = "../port-in-ingest" }
+port-out-event-log        = { path = "../port-out-event-log" }
+timing-core               = { path = "../timing-core" }
+adapter-ingest-tcp        = { path = "../adapter-ingest-tcp" }
+adapter-event-log-segment = { path = "../adapter-event-log-segment" }
+async-trait               = "0.1"
+axum                      = { version = "0.8", features = ["json"] }
+futures-util              = "0.3"
+serde                     = { version = "1", features = ["derive"] }
+serde_json                = "1"
+thiserror                 = "2"
+tokio                     = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+toml                      = "0.8"
+tower-http                = { version = "0.6", features = ["cors"] }
+tracing                   = "0.1"
+tracing-subscriber        = { version = "0.3", features = ["env-filter"] }
+
+# The Unix-socket ingest adapter is cfg(unix) internally; gating the
+# dep itself keeps it out of non-Unix builds where it would compile to
+# an empty stub anyway. Windows builds skip the dep entirely.
+[target.'cfg(unix)'.dependencies]
+adapter-ingest-unix-socket = { path = "../adapter-ingest-unix-socket" }
+
+[dev-dependencies]
+tempfile  = "3"
+tokio     = { version = "1", features = ["rt", "macros", "net", "time"] }
+minicbor  = { version = "0.24", features = ["alloc"] }
+reqwest   = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }

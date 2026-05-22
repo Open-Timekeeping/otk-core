@@ -13,6 +13,7 @@ members  = [
     "adapter-ingest-unix-socket",
     "otk-sdk",
     "producer-simulated",
+    "timing-node",
 ]
 resolver = "2"
 
