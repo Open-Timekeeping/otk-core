@@ -153,7 +153,10 @@ mod tests {
 
     #[test]
     fn round_trip_loop_transponder() {
-        let d = base_detection(SensorData::LoopTransponder { rssi_dbm: Some(-72), pulse_count: Some(3) });
+        let d = base_detection(SensorData::LoopTransponder {
+            rssi_dbm: Some(-72),
+            pulse_count: Some(3),
+        });
         assert_eq!(d, cbor_round_trip(&d));
     }
 
@@ -165,7 +168,9 @@ mod tests {
 
     #[test]
     fn round_trip_manual() {
-        let d = base_detection(SensorData::Manual { operator_id: Some(OperatorId::new("alice")) });
+        let d = base_detection(SensorData::Manual {
+            operator_id: Some(OperatorId::new("alice")),
+        });
         assert_eq!(d, cbor_round_trip(&d));
     }
 
@@ -175,7 +180,10 @@ mod tests {
         assert_eq!(d.detector_id().as_str(), "loop-a");
         assert_eq!(d.timing_point_id().as_str(), "tp-finish");
         assert_eq!(d.detected_at_ns(), 1_700_000_000_000_000_000);
-        assert_eq!(d.timestamping_method(), TimestampingMethod::HardwareEventCapture);
+        assert_eq!(
+            d.timestamping_method(),
+            TimestampingMethod::HardwareEventCapture
+        );
         assert_eq!(d.sequence_number(), 42);
     }
 }

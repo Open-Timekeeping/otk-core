@@ -1,5 +1,5 @@
 use event_model::{OtkEvent, StreamDescriptor};
-use protocol::{
+use otk_protocol::{
     ids::ProducerId, Connect, ConnectAck, ConnectReject, Heartbeat, MessageType, OtkEnvelope,
     PROTOCOL_VERSION,
 };
@@ -117,7 +117,10 @@ pub struct Producer {
 
 impl Producer {
     /// Connect to the timing node at `transport` and complete the OTK handshake.
-    pub async fn connect(transport: Transport, config: ProducerConfig) -> Result<Self, ProducerError> {
+    pub async fn connect(
+        transport: Transport,
+        config: ProducerConfig,
+    ) -> Result<Self, ProducerError> {
         if config.max_frame_bytes == 0 {
             return Err(ProducerError::Config(
                 "max_frame_bytes must not be zero".into(),
@@ -173,9 +176,9 @@ impl Producer {
                 })
             }
             MessageType::ConnectReject => {
-                let payload = response
-                    .payload
-                    .ok_or_else(|| ProducerError::Handshake("ConnectReject has no payload".into()))?;
+                let payload = response.payload.ok_or_else(|| {
+                    ProducerError::Handshake("ConnectReject has no payload".into())
+                })?;
                 let reject: ConnectReject = minicbor::decode(&payload)
                     .map_err(|e| ProducerError::Decode(format!("ConnectReject decode: {e}")))?;
                 Err(ProducerError::Rejected {
@@ -198,7 +201,8 @@ impl Producer {
         let mut env = make_envelope(&self.producer_id, MessageType::Event, Some(payload));
         env.sequence_number = Some(seq);
         send_frame(&mut self.stream, &encode_envelope(&env)?).await?;
-        self.next_seq = self.next_seq
+        self.next_seq = self
+            .next_seq
             .checked_add(1)
             .expect("sequence number overflow: u64 exhausted after 2^64 events");
         Ok(())
@@ -206,8 +210,10 @@ impl Producer {
 
     /// Send a keep-alive heartbeat.
     pub async fn send_heartbeat(&mut self) -> Result<(), ProducerError> {
-        let hb = Heartbeat { sent_at_ns: now_ns() };
-        let payload = minicbor::to_vec(&hb)
+        let hb = Heartbeat {
+            sent_at_ns: now_ns(),
+        };
+        let payload = minicbor::to_vec(hb)
             .map_err(|e| ProducerError::Encode(format!("Heartbeat encode: {e}")))?;
         let env = make_envelope(&self.producer_id, MessageType::Heartbeat, Some(payload));
         send_frame(&mut self.stream, &encode_envelope(&env)?).await?;
@@ -250,8 +256,7 @@ async fn send_frame(stream: &mut TcpStream, payload: &[u8]) -> Result<(), Produc
     })?;
     if len > MAX_FRAME_BYTES {
         return Err(ProducerError::Encode(format!(
-            "frame too large: {} bytes exceeds the {} byte protocol maximum",
-            len, MAX_FRAME_BYTES
+            "frame too large: {len} bytes exceeds the {MAX_FRAME_BYTES} byte protocol maximum"
         )));
     }
     stream.write_all(&len.to_be_bytes()).await?;

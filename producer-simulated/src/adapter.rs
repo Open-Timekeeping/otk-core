@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use otk_sdk::producer::{
-    AdapterError, AdapterEvent, AdapterState, DetectionBuilder, DetectorAdapter,
-    HealthEventBuilder, MetadataBuilder, SequenceCounter, now_ns,
-};
 use otk_sdk::event_model::{
     DetectorId, SourceAttestation, SubjectId, TimebaseId, TimestampingMethod, TimingPointId,
+};
+use otk_sdk::producer::{
+    now_ns, AdapterError, AdapterEvent, AdapterState, DetectionBuilder, DetectorAdapter,
+    HealthEventBuilder, MetadataBuilder, SequenceCounter,
 };
 
 use crate::config::SimulatorConfig;
@@ -37,9 +37,12 @@ impl SimulatorAdapter {
     pub fn new(config: SimulatorConfig) -> Self {
         let detector_id = DetectorId::new(&config.detector_id);
         let timebase_id = TimebaseId::new(&config.timebase_id);
-        let timing_point_ids =
-            config.timing_point_ids.iter().map(|s| TimingPointId::new(s)).collect();
-        let subject_ids = config.subject_ids.iter().map(|s| SubjectId::new(s)).collect();
+        let timing_point_ids = config
+            .timing_point_ids
+            .iter()
+            .map(TimingPointId::new)
+            .collect();
+        let subject_ids = config.subject_ids.iter().map(SubjectId::new).collect();
         Self {
             config,
             state: AdapterState::Initializing,
@@ -134,15 +137,16 @@ impl DetectorAdapter for SimulatorAdapter {
                     Some(self.subject_ids[idx].clone())
                 };
 
-                let mut builder =
-                    DetectionBuilder::new(&self.detector_id, &tp, now_ns(), seq)
-                        .timebase_id(self.timebase_id.clone());
+                let mut builder = DetectionBuilder::new(&self.detector_id, &tp, now_ns(), seq)
+                    .timebase_id(self.timebase_id.clone());
 
                 if let Some(sid) = subject_id {
                     builder = builder.subject_id(sid);
                 }
 
-                self.phase = Phase::Generating { emitted: emitted + 1 };
+                self.phase = Phase::Generating {
+                    emitted: emitted + 1,
+                };
                 Some(Ok(AdapterEvent::Detection(builder.build())))
             }
 

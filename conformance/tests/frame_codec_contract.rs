@@ -156,7 +156,9 @@ fn serial_corrupt_byte_inside_frame_reports_corrupt_then_resyncs() {
     let mut dec = SerialFrameDecoder::new(65_535);
     let results = dec.push(&combined);
     assert!(
-        results.iter().any(|r| matches!(r, Err(FrameError::CorruptFrame))),
+        results
+            .iter()
+            .any(|r| matches!(r, Err(FrameError::CorruptFrame))),
         "expected a CorruptFrame from CRC mismatch, got: {:?}",
         results.iter().map(|r| r.is_ok()).collect::<Vec<_>>()
     );
@@ -178,6 +180,10 @@ fn serial_extra_zero_delimiters_ignored() {
 
     let mut dec = SerialFrameDecoder::new(65_535);
     let results = dec.push(&padded);
-    assert_eq!(results.len(), 1, "extra delimiters must not produce phantom frames");
+    assert_eq!(
+        results.len(),
+        1,
+        "extra delimiters must not produce phantom frames"
+    );
     assert!(results[0].is_ok());
 }

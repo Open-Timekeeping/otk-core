@@ -1,1 +1,12 @@
 /target
+
+# Local pre-consolidation backups. The consolidation merged 8 sibling
+# repos into this workspace; if you keep `git bundle` snapshots of the
+# pre-merge histories for recovery, put them here so they stay out of
+# tracked history.
+/pre-consolidation-backups
+
+# Tool-local files Rust devs commonly leave behind.
+*.rs.bk
+*.swp
+.DS_Store

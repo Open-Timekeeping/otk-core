@@ -323,7 +323,10 @@ struct ErrorBody {
 /// who could hit `/api/v1/events` while storage was unhealthy.
 fn map_query_error(e: QueryError) -> (StatusCode, Json<ErrorBody>) {
     match e {
-        QueryError::RetentionExpired { requested, earliest_available } => (
+        QueryError::RetentionExpired {
+            requested,
+            earliest_available,
+        } => (
             StatusCode::GONE,
             Json(ErrorBody {
                 error: "retention_expired",

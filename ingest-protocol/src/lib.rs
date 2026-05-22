@@ -31,7 +31,7 @@
 //! [`PostHandshakeProcessor`] over every envelope that follows; on `Rejected`
 //! it closes the session.
 //!
-//! [`OtkEnvelope`]: protocol::OtkEnvelope
+//! [`OtkEnvelope`]: otk_protocol::OtkEnvelope
 //! [`port_in_ingest::IngestSession`]: https://docs.rs/port-in-ingest
 
 pub mod error;

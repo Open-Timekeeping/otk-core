@@ -1,6 +1,6 @@
 use alloc::vec;
 use alloc::vec::Vec;
-use protocol::OtkEnvelope;
+use otk_protocol::OtkEnvelope;
 
 use crate::error::FrameError;
 
@@ -16,7 +16,10 @@ use crate::error::FrameError;
 pub fn encode_serial(envelope: &OtkEnvelope, max_frame_size: usize) -> Result<Vec<u8>, FrameError> {
     let payload = minicbor::to_vec(envelope).map_err(|_| FrameError::EncodeFailed)?;
     if payload.len() > max_frame_size {
-        return Err(FrameError::OversizeFrame { len: Some(payload.len()), max: max_frame_size });
+        return Err(FrameError::OversizeFrame {
+            len: Some(payload.len()),
+            max: max_frame_size,
+        });
     }
     let crc = crc16_ccitt_false(&payload).to_be_bytes();
     let mut with_crc = Vec::with_capacity(payload.len() + 2);
@@ -77,7 +80,13 @@ impl SerialFrameDecoder {
     pub fn new(max_frame_size: usize) -> Self {
         // Derive the on-wire limit: add 2 bytes for CRC-16, then apply COBS overhead.
         let max_wire_size = cobs::max_encoding_length(max_frame_size.saturating_add(2));
-        Self { buf: Vec::new(), scratch: Vec::new(), max_frame_size, max_wire_size, discarding: false }
+        Self {
+            buf: Vec::new(),
+            scratch: Vec::new(),
+            max_frame_size,
+            max_wire_size,
+            discarding: false,
+        }
     }
 
     pub fn push(&mut self, bytes: &[u8]) -> Vec<Result<OtkEnvelope, FrameError>> {
@@ -130,7 +139,10 @@ impl SerialFrameDecoder {
                 // enter discard mode until the next 0x00 delimiter.
                 self.buf.clear();
                 self.discarding = true;
-                results.push(Err(FrameError::OversizeFrame { len: None, max: self.max_frame_size }));
+                results.push(Err(FrameError::OversizeFrame {
+                    len: None,
+                    max: self.max_frame_size,
+                }));
             } else {
                 self.buf.push(b);
             }
@@ -149,7 +161,11 @@ pub fn crc16_ccitt_false(data: &[u8]) -> u16 {
     for &byte in data {
         crc ^= (byte as u16) << 8;
         for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
         }
     }
     crc
@@ -158,7 +174,7 @@ pub fn crc16_ccitt_false(data: &[u8]) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use protocol::{MessageType, OtkEnvelope, ids::ProducerId};
+    use otk_protocol::{ids::ProducerId, MessageType, OtkEnvelope};
 
     fn test_envelope() -> OtkEnvelope {
         OtkEnvelope {
@@ -199,7 +215,10 @@ mod tests {
         let frame = encode_serial(&original, crate::DEFAULT_MAX_FRAME_SIZE).unwrap();
         let mut dec = SerialFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
         let _ = dec.push(&frame);
-        assert!(!dec.has_pending(), "decoder buffer should be empty after a complete frame");
+        assert!(
+            !dec.has_pending(),
+            "decoder buffer should be empty after a complete frame"
+        );
     }
 
     #[test]
@@ -230,7 +249,9 @@ mod tests {
         }
 
         assert_eq!(all_results.len(), 1);
-        let decoded = all_results[0].as_ref().expect("incremental round-trip failed");
+        let decoded = all_results[0]
+            .as_ref()
+            .expect("incremental round-trip failed");
         assert_eq!(
             minicbor::to_vec(&original).unwrap(),
             minicbor::to_vec(decoded).unwrap(),
@@ -272,11 +293,17 @@ mod tests {
         let mut dec = SerialFrameDecoder::new(cbor_len);
         let results = dec.push(&frame);
         assert_eq!(results.len(), 1);
-        assert!(results[0].is_ok(), "decoder rejected a frame at the encoder limit");
+        assert!(
+            results[0].is_ok(),
+            "decoder rejected a frame at the encoder limit"
+        );
 
         // One byte under: encoder must reject.
         assert!(
-            matches!(encode_serial(&envelope, cbor_len - 1), Err(FrameError::OversizeFrame { .. })),
+            matches!(
+                encode_serial(&envelope, cbor_len - 1),
+                Err(FrameError::OversizeFrame { .. })
+            ),
             "encoder accepted a payload exceeding max_frame_size"
         );
     }
@@ -303,9 +330,19 @@ mod tests {
 
         // The two corrupt fragments each produce an error; the clean frame succeeds
         // and decodes to the original envelope.
-        assert!(results.len() >= 2, "expected errors from corrupt fragments and a success");
-        assert!(results[..results.len() - 1].iter().all(|r| r.is_err()), "corrupt fragments must error");
-        let decoded = results.last().unwrap().as_ref().expect("clean frame after resync must decode");
+        assert!(
+            results.len() >= 2,
+            "expected errors from corrupt fragments and a success"
+        );
+        assert!(
+            results[..results.len() - 1].iter().all(|r| r.is_err()),
+            "corrupt fragments must error"
+        );
+        let decoded = results
+            .last()
+            .unwrap()
+            .as_ref()
+            .expect("clean frame after resync must decode");
         assert_eq!(
             minicbor::to_vec(&envelope).unwrap(),
             minicbor::to_vec(decoded).unwrap(),
@@ -357,7 +394,8 @@ mod tests {
         assert!(
             matches!(results[0], Err(FrameError::OversizeFrame { len: Some(l), max: m })
                 if l == max_frame_size + 1 && m == max_frame_size),
-            "expected OversizeFrame, got {:?}", results[0]
+            "expected OversizeFrame, got {:?}",
+            results[0]
         );
     }
 }

@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 
+use adapter_event_log_segment::{SegmentLog, SegmentLogConfig};
 use event_model::{
     Detection, DetectionId, DetectorId, OtkEvent, SensorData, SourceAttestation, SubjectId,
     TimebaseId, TimestampingMethod, TimingPointId,
 };
-use adapter_event_log_segment::{SegmentLog, SegmentLogConfig};
+use otk_protocol::{
+    ids::ProducerId, Connect, ConnectAck, MessageType, OtkEnvelope, PROTOCOL_VERSION,
+};
 use port_out_event_log::{EventLog, Offset};
-use protocol::{ids::ProducerId, Connect, ConnectAck, MessageType, OtkEnvelope, PROTOCOL_VERSION};
 use timing_node::{ListenerConfig, Node, NodeConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -18,12 +20,24 @@ fn encode_frame(envelope: &OtkEnvelope) -> Vec<u8> {
     frame
 }
 
+/// Read one length-prefixed frame, with a per-read timeout so a
+/// silent or truncated server can't hang the test under
+/// `cargo test`'s parallel runner. 5 s is well beyond any legitimate
+/// handshake reply (sub-millisecond locally) but short enough that a
+/// failing test fails deterministically.
 async fn recv_frame(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
+    let read_timeout = tokio::time::Duration::from_secs(5);
     let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await.expect("read length");
+    tokio::time::timeout(read_timeout, stream.read_exact(&mut len_buf))
+        .await
+        .expect("recv_frame: timed out reading length prefix")
+        .expect("recv_frame: I/O error reading length prefix");
     let len = u32::from_be_bytes(len_buf) as usize;
     let mut payload = vec![0u8; len];
-    stream.read_exact(&mut payload).await.expect("read payload");
+    tokio::time::timeout(read_timeout, stream.read_exact(&mut payload))
+        .await
+        .expect("recv_frame: timed out reading payload")
+        .expect("recv_frame: I/O error reading payload");
     payload
 }
 
@@ -82,7 +96,10 @@ fn make_detection() -> Detection {
         timebase_id: TimebaseId::new("gps-1"),
         source_attestation: SourceAttestation::RuntimeDiscovered,
         sequence_number: 1,
-        sensor: SensorData::LoopTransponder { rssi_dbm: Some(-60), pulse_count: None },
+        sensor: SensorData::LoopTransponder {
+            rssi_dbm: Some(-60),
+            pulse_count: None,
+        },
     }
 }
 
@@ -150,10 +167,17 @@ async fn handshake_and_detection_stored() {
         .expect("api task panicked");
 
     // Verify the detection was persisted.
-    let log_config = SegmentLogConfig { dir: storage_dir, ..SegmentLogConfig::default() };
+    let log_config = SegmentLogConfig {
+        dir: storage_dir,
+        ..SegmentLogConfig::default()
+    };
     let mut log = SegmentLog::open(log_config).await.unwrap();
     let latest = log.latest_offset().await.unwrap();
-    assert_eq!(latest, Some(Offset::new(0)), "one event should have been stored");
+    assert_eq!(
+        latest,
+        Some(Offset::new(0)),
+        "one event should have been stored"
+    );
 }
 
 #[tokio::test]

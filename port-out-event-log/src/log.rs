@@ -153,10 +153,7 @@ pub trait EventLog: Send {
     /// earliest retained offset, or if the log is fully evicted (populated but
     /// all entries removed by retention), returning
     /// `RetentionExpired { earliest_available: None }`.
-    async fn subscribe(
-        &mut self,
-        from: Offset,
-    ) -> Result<Box<dyn LogSubscription>, StorageError>;
+    async fn subscribe(&mut self, from: Offset) -> Result<Box<dyn LogSubscription>, StorageError>;
 }
 
 #[cfg(test)]
@@ -207,7 +204,11 @@ mod tests {
         let mut log: Box<dyn EventLog> = Box::new(MockLog);
         assert!(log.latest_offset().await.unwrap().is_none());
         assert!(log.earliest_offset().await.unwrap().is_none());
-        assert!(log.read_range(Offset::new(0), None).await.unwrap().is_empty());
+        assert!(log
+            .read_range(Offset::new(0), None)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]

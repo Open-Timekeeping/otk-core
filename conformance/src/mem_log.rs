@@ -113,7 +113,9 @@ impl Default for MemLog {
 impl EventLog for MemLog {
     async fn append(&mut self, events: &[OtkEvent]) -> Result<Offset, StorageError> {
         if events.is_empty() {
-            return Err(StorageError::InvalidInput("events slice must not be empty".into()));
+            return Err(StorageError::InvalidInput(
+                "events slice must not be empty".into(),
+            ));
         }
         let mut inner = self.inner.lock().await;
         let start = inner.entries.len() as u64;
@@ -197,10 +199,7 @@ impl EventLog for MemLog {
         Ok(Some(Offset::new(0)))
     }
 
-    async fn subscribe(
-        &mut self,
-        from: Offset,
-    ) -> Result<Box<dyn LogSubscription>, StorageError> {
+    async fn subscribe(&mut self, from: Offset) -> Result<Box<dyn LogSubscription>, StorageError> {
         let inner = self.inner.lock().await;
         let from_u64 = from.as_u64();
         if let Some(earliest) = inner.earliest_retained {

@@ -6,7 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use event_model::OtkEvent;
-use port_out_event_log::{EventLog, LogEntry, LogSubscription, Offset, RetentionPolicy, StorageError};
+use port_out_event_log::{
+    EventLog, LogEntry, LogSubscription, Offset, RetentionPolicy, StorageError,
+};
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Notify;
@@ -204,7 +206,10 @@ impl SegmentLog {
                     let ts = now_ns();
                     file.set_len(0).await?;
                     file.seek(SeekFrom::Start(0)).await?;
-                    let hdr = SegmentHeader { base_offset: base, created_at_ns: ts };
+                    let hdr = SegmentHeader {
+                        base_offset: base,
+                        created_at_ns: ts,
+                    };
                     SegmentHeader::write(&mut file, &hdr).await?;
                     ts
                 };
@@ -216,7 +221,9 @@ impl SegmentLog {
                 // correct if this segment is rolled on the first append after
                 // a restart.
                 let last_appended_at_ns = if let Some(&last_pos) = positions.last() {
-                    segment::read_record(&mut file, last_pos).await?.appended_at_ns
+                    segment::read_record(&mut file, last_pos)
+                        .await?
+                        .appended_at_ns
                 } else {
                     0
                 };
@@ -287,7 +294,10 @@ impl SegmentLog {
             .open(&path)
             .await?;
 
-        let header = SegmentHeader { base_offset: base, created_at_ns: ts };
+        let header = SegmentHeader {
+            base_offset: base,
+            created_at_ns: ts,
+        };
         SegmentHeader::write(&mut file, &header).await?;
 
         // Fsync the parent directory so the new .seg directory entry is
@@ -418,8 +428,7 @@ impl SegmentLog {
             RetentionPolicy::Indefinite => {}
 
             RetentionPolicy::TimeBased { max_age_secs } => {
-                let cutoff =
-                    now_ns().saturating_sub(max_age_secs.saturating_mul(1_000_000_000));
+                let cutoff = now_ns().saturating_sub(max_age_secs.saturating_mul(1_000_000_000));
                 loop {
                     match self.closed.front() {
                         Some(seg) if seg.last_appended_at_ns < cutoff => {
@@ -437,7 +446,9 @@ impl SegmentLog {
                 let mut total: u64 = self.closed.iter().map(|s| s.byte_size).sum::<u64>()
                     + self.active.as_ref().map_or(0, |a| a.byte_size);
                 while total > *max_bytes {
-                    let Some(front) = self.closed.front() else { break };
+                    let Some(front) = self.closed.front() else {
+                        break;
+                    };
                     let evicted_size = front.byte_size;
                     let path = front.path.clone();
                     let idx = self.idx_path(front.base_offset);
@@ -447,9 +458,11 @@ impl SegmentLog {
                 }
             }
 
-            RetentionPolicy::Hybrid { max_age_secs, max_bytes } => {
-                let cutoff =
-                    now_ns().saturating_sub(max_age_secs.saturating_mul(1_000_000_000));
+            RetentionPolicy::Hybrid {
+                max_age_secs,
+                max_bytes,
+            } => {
+                let cutoff = now_ns().saturating_sub(max_age_secs.saturating_mul(1_000_000_000));
                 loop {
                     match self.closed.front() {
                         Some(seg) if seg.last_appended_at_ns < cutoff => {
@@ -464,7 +477,9 @@ impl SegmentLog {
                 let mut total: u64 = self.closed.iter().map(|s| s.byte_size).sum::<u64>()
                     + self.active.as_ref().map_or(0, |a| a.byte_size);
                 while total > *max_bytes {
-                    let Some(front) = self.closed.front() else { break };
+                    let Some(front) = self.closed.front() else {
+                        break;
+                    };
                     let evicted_size = front.byte_size;
                     let path = front.path.clone();
                     let idx = self.idx_path(front.base_offset);
@@ -485,7 +500,11 @@ impl SegmentLog {
             return true;
         }
         let elapsed_ns = now_ns().saturating_sub(active.created_at_ns);
-        elapsed_ns >= self.config.max_segment_age_secs.saturating_mul(1_000_000_000)
+        elapsed_ns
+            >= self
+                .config
+                .max_segment_age_secs
+                .saturating_mul(1_000_000_000)
     }
 
     /// Return the raw earliest offset value, or `None` if the log is empty.
@@ -496,7 +515,11 @@ impl SegmentLog {
         // Only return the active segment's base_offset if it has records.
         // An empty active segment (header only) has no readable entries.
         self.active.as_ref().and_then(|a| {
-            if a.positions.is_empty() { None } else { Some(a.base_offset) }
+            if a.positions.is_empty() {
+                None
+            } else {
+                Some(a.base_offset)
+            }
         })
     }
 
@@ -519,7 +542,7 @@ impl SegmentLog {
 
     /// True if the log was populated at some point but all retained entries are gone.
     fn is_fully_evicted(&self) -> bool {
-        let active_empty = self.active.as_ref().map_or(true, |a| a.positions.is_empty());
+        let active_empty = self.active.as_ref().is_none_or(|a| a.positions.is_empty());
         self.closed.is_empty() && active_empty && self.next_offset > 0
     }
 }
@@ -741,16 +764,14 @@ impl EventLog for SegmentLog {
                 && active.base_offset + active.positions.len() as u64 > from_raw
             {
                 let start = from_raw.max(active.base_offset);
-                let end =
-                    effective_to.min(active.base_offset + active.positions.len() as u64);
+                let end = effective_to.min(active.base_offset + active.positions.len() as u64);
 
                 for offset in start..end {
                     let i = (offset - active.base_offset) as usize;
                     if i >= active.positions.len() {
                         break;
                     }
-                    let entry =
-                        segment::read_record(&mut active.file, active.positions[i]).await?;
+                    let entry = segment::read_record(&mut active.file, active.positions[i]).await?;
                     if entry.offset.as_u64() != offset {
                         return Err(StorageError::Corrupted(format!(
                             "index points to wrong record at position {}: expected offset {offset}, got {}",
@@ -773,10 +794,7 @@ impl EventLog for SegmentLog {
         Ok(self.earliest_offset_raw().map(Offset::new))
     }
 
-    async fn subscribe(
-        &mut self,
-        from: Offset,
-    ) -> Result<Box<dyn LogSubscription>, StorageError> {
+    async fn subscribe(&mut self, from: Offset) -> Result<Box<dyn LogSubscription>, StorageError> {
         let from_raw = from.as_u64();
 
         // Subscribing at or beyond the tail is always valid; the subscription
@@ -896,9 +914,8 @@ async fn read_watermark(dir: &Path) -> Result<Option<u64>, StorageError> {
 mod tests {
     use super::*;
     use event_model::{
-        Detection, DetectionId, DetectorId, OtkEvent, SourceAttestation, TimestampingMethod,
-        TimebaseId, TimingPointId,
-        detection::SensorData,
+        detection::SensorData, Detection, DetectionId, DetectorId, OtkEvent, SourceAttestation,
+        TimebaseId, TimestampingMethod, TimingPointId,
     };
     use tempfile::tempdir;
     use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -1235,7 +1252,10 @@ mod tests {
         let mut log = SegmentLog::open(SegmentLogConfig {
             dir: dir.path().to_path_buf(),
             max_segment_bytes: 1,
-            retention: RetentionPolicy::Hybrid { max_age_secs: 0, max_bytes: u64::MAX },
+            retention: RetentionPolicy::Hybrid {
+                max_age_secs: 0,
+                max_bytes: u64::MAX,
+            },
             ..Default::default()
         })
         .await
@@ -1263,7 +1283,10 @@ mod tests {
         let mut log = SegmentLog::open(SegmentLogConfig {
             dir: dir.path().to_path_buf(),
             max_segment_bytes: 1,
-            retention: RetentionPolicy::Hybrid { max_age_secs: u64::MAX, max_bytes: 1 },
+            retention: RetentionPolicy::Hybrid {
+                max_age_secs: u64::MAX,
+                max_bytes: 1,
+            },
             ..Default::default()
         })
         .await
@@ -1316,7 +1339,10 @@ mod tests {
             // Each append forces a roll, so both events end up in closed segments.
             log.append(&[make_event()]).await.unwrap();
             log.append(&[make_event()]).await.unwrap();
-            assert!(!log.closed.is_empty(), "should have at least one closed segment");
+            assert!(
+                !log.closed.is_empty(),
+                "should have at least one closed segment"
+            );
         }
 
         let mut log2 = SegmentLog::open(SegmentLogConfig {
@@ -1393,10 +1419,18 @@ mod tests {
         );
 
         log.append(&[make_event()]).await.unwrap();
-        assert_eq!(log.closed.len(), 2, "second append should roll into a second closed segment");
+        assert_eq!(
+            log.closed.len(),
+            2,
+            "second append should roll into a second closed segment"
+        );
 
         let entries = log.read_range(Offset::new(0), None).await.unwrap();
-        assert_eq!(entries.len(), 2, "both events readable after age-based rolls");
+        assert_eq!(
+            entries.len(),
+            2,
+            "both events readable after age-based rolls"
+        );
         assert_eq!(entries[0].offset, Offset::new(0));
         assert_eq!(entries[1].offset, Offset::new(1));
     }

@@ -107,17 +107,19 @@ impl Node {
         let mut ingest = Vec::with_capacity(config.listeners.len());
         for listener in &config.listeners {
             match listener {
-                ListenerConfig::Tcp { id, bind_addr, max_frame_bytes } => {
+                ListenerConfig::Tcp {
+                    id,
+                    bind_addr,
+                    max_frame_bytes,
+                } => {
                     let ingest_config = TcpIngestConfig {
                         bind_addr: *bind_addr,
                         max_frame_bytes: *max_frame_bytes,
                         handshake_timeout: std::time::Duration::from_secs(5),
                     };
-                    let port = TcpIngestPort::bind_with_auth(
-                        ingest_config,
-                        Arc::clone(&authoriser),
-                    )
-                    .await?;
+                    let port =
+                        TcpIngestPort::bind_with_auth(ingest_config, Arc::clone(&authoriser))
+                            .await?;
                     let addr = port.local_addr()?;
                     ingest.push(BoundIngestListener {
                         id: id.clone(),
@@ -126,7 +128,11 @@ impl Node {
                     });
                 }
                 #[cfg(unix)]
-                ListenerConfig::UnixSocket { id, socket_path, max_frame_bytes } => {
+                ListenerConfig::UnixSocket {
+                    id,
+                    socket_path,
+                    max_frame_bytes,
+                } => {
                     let cfg = adapter_ingest_unix_socket::UnixSocketIngestConfig {
                         socket_path: socket_path.clone(),
                         max_frame_bytes: *max_frame_bytes,
@@ -191,7 +197,16 @@ impl Node {
     /// Unix-only config still has no `SocketAddr` to return and will
     /// trip this `expect`. For mixed-listener or Unix-only deployments,
     /// use [`Node::listener_tcp_addr`] (returns `Option<SocketAddr>`)
-    /// or [`Node::listener_unix_path`] keyed by `id`.
+    /// or `Node::listener_unix_path` (Unix-only; cfg(unix)) keyed by `id`.
+    // `find_map` is the semantically right call here: on Unix, the
+    // `BoundListenerAddr::UnixSocket(_) => None` arm exists and we want
+    // to skip Unix-socket listeners while looking for the first TCP
+    // listener. On non-Unix targets the cfg gate removes that arm
+    // entirely, leaving only the Tcp arm, and clippy notices that the
+    // remaining match always returns Some - hence the lint. The lint is
+    // correct on Windows in isolation but the cross-platform form has to
+    // stay `find_map` to compile on Unix.
+    #[allow(clippy::unnecessary_find_map)]
     pub fn local_addr(&self) -> std::net::SocketAddr {
         self.ingest
             .iter()
@@ -206,24 +221,38 @@ impl Node {
             )
     }
 
+    // and_then (rather than map) because on Unix the inner match has a
+    // None-returning arm. cargo clippy --fix on Windows (where the cfg
+    // gate removes the Unix arm) rewrote this to .map(...) returning a
+    // bare SocketAddr; that change doesn't compile on Linux. The right
+    // cross-platform form is and_then with the Tcp arm returning Some.
+    #[allow(clippy::bind_instead_of_map)]
     pub fn listener_tcp_addr(&self, id: &str) -> Option<std::net::SocketAddr> {
-        self.ingest.iter().find(|l| l.id == id).and_then(|l| match &l.addr {
-            BoundListenerAddr::Tcp(a) => Some(*a),
-            #[cfg(unix)]
-            BoundListenerAddr::UnixSocket(_) => None,
-        })
+        self.ingest
+            .iter()
+            .find(|l| l.id == id)
+            .and_then(|l| match &l.addr {
+                BoundListenerAddr::Tcp(a) => Some(*a),
+                #[cfg(unix)]
+                BoundListenerAddr::UnixSocket(_) => None,
+            })
     }
 
     #[cfg(unix)]
     pub fn listener_unix_path(&self, id: &str) -> Option<&std::path::Path> {
-        self.ingest.iter().find(|l| l.id == id).and_then(|l| match &l.addr {
-            BoundListenerAddr::UnixSocket(p) => Some(p.as_path()),
-            BoundListenerAddr::Tcp(_) => None,
-        })
+        self.ingest
+            .iter()
+            .find(|l| l.id == id)
+            .and_then(|l| match &l.addr {
+                BoundListenerAddr::UnixSocket(p) => Some(p.as_path()),
+                BoundListenerAddr::Tcp(_) => None,
+            })
     }
 
     pub fn api_addr(&self) -> std::net::SocketAddr {
-        self.api_listener.local_addr().expect("api listener has a local addr")
+        self.api_listener
+            .local_addr()
+            .expect("api listener has a local addr")
     }
 
     /// Run the node until either Ctrl-C arrives or a spawned task
@@ -233,7 +262,7 @@ impl Node {
     /// drained without panic or error, and `Err(ShutdownError)` if
     /// any spawned task panicked, returned an error, exited
     /// unexpectedly before the shutdown signal, or failed to drain
-    /// within [`SHUTDOWN_DEADLINE`]. The caller is expected to
+    /// within `SHUTDOWN_DEADLINE` (a private constant, 10 s). The caller is expected to
     /// translate `Err` into a non-zero process exit so supervisors
     /// (systemd, Kubernetes, etc.) restart the node. Just logging
     /// and returning `Ok` would let the node exit with status 0
@@ -350,7 +379,8 @@ impl Node {
                         Ok((name, Err(e))) if e.is_panic() => {
                             let cause = join_error_cause(e);
                             tracing::error!(task = %name, cause = %cause, "task panicked during shutdown drain");
-                            first_failure.get_or_insert(ShutdownError::TaskPanicked { name, cause });
+                            first_failure
+                                .get_or_insert(ShutdownError::TaskPanicked { name, cause });
                         }
                         Ok((name, Err(e))) => {
                             let cause = join_error_cause(e);
@@ -422,14 +452,20 @@ impl Node {
     pub fn run_with_shutdown(
         self,
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
-    ) -> (Vec<tokio::task::JoinHandle<()>>, tokio::task::JoinHandle<()>) {
+    ) -> (
+        Vec<tokio::task::JoinHandle<()>>,
+        tokio::task::JoinHandle<()>,
+    ) {
         self.spawn_tasks(shutdown_rx)
     }
 
     fn spawn_tasks(
         self,
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
-    ) -> (Vec<tokio::task::JoinHandle<()>>, tokio::task::JoinHandle<()>) {
+    ) -> (
+        Vec<tokio::task::JoinHandle<()>>,
+        tokio::task::JoinHandle<()>,
+    ) {
         // Destructure `self` up front rather than relying on the compiler's
         // disjoint-capture rules to let `async move { ... self.api_listener
         // ... }` co-exist with a later `self.ingest.into_iter()`. The
@@ -450,9 +486,13 @@ impl Node {
             node_id,
         } = self;
 
-        let ingest_summary: Vec<(String, String)> =
-            ingest.iter().map(|l| (l.id.clone(), l.addr.to_string())).collect();
-        let api_addr = api_listener.local_addr().expect("api listener has a local addr");
+        let ingest_summary: Vec<(String, String)> = ingest
+            .iter()
+            .map(|l| (l.id.clone(), l.addr.to_string()))
+            .collect();
+        let api_addr = api_listener
+            .local_addr()
+            .expect("api listener has a local addr");
         info!(
             api_addr = %api_addr,
             node_id = %node_id,
@@ -599,20 +639,30 @@ fn classify_unexpected_exit(
     joined: Result<(String, Result<(), tokio::task::JoinError>), tokio::task::JoinError>,
 ) -> (tracing::Level, ShutdownError) {
     match joined {
-        Ok((name, Ok(()))) => {
-            (tracing::Level::WARN, ShutdownError::TaskExitedEarly { name })
-        }
+        Ok((name, Ok(()))) => (
+            tracing::Level::WARN,
+            ShutdownError::TaskExitedEarly { name },
+        ),
         Ok((name, Err(e))) if e.is_panic() => {
             let cause = join_error_cause(e);
-            (tracing::Level::ERROR, ShutdownError::TaskPanicked { name, cause })
+            (
+                tracing::Level::ERROR,
+                ShutdownError::TaskPanicked { name, cause },
+            )
         }
         Ok((name, Err(e))) => {
             let cause = join_error_cause(e);
-            (tracing::Level::ERROR, ShutdownError::TaskFailed { name, cause })
+            (
+                tracing::Level::ERROR,
+                ShutdownError::TaskFailed { name, cause },
+            )
         }
         Err(e) => {
             let cause = join_error_cause(e);
-            (tracing::Level::ERROR, ShutdownError::MonitorPanicked { cause })
+            (
+                tracing::Level::ERROR,
+                ShutdownError::MonitorPanicked { cause },
+            )
         }
     }
 }

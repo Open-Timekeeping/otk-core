@@ -57,8 +57,10 @@ fn connect_ack_roundtrip_preserves_negotiated_version() {
         "premise: a sensible producer's advertised range must contain PROTOCOL_VERSION"
     );
 
-    let ack = ConnectAck { negotiated_version: PROTOCOL_VERSION };
-    let bytes = minicbor::to_vec(&ack).expect("encode ack");
+    let ack = ConnectAck {
+        negotiated_version: PROTOCOL_VERSION,
+    };
+    let bytes = minicbor::to_vec(ack).expect("encode ack");
     let decoded: ConnectAck = minicbor::decode(&bytes).expect("decode ack");
     assert_eq!(decoded.negotiated_version, PROTOCOL_VERSION);
 }
@@ -83,9 +85,12 @@ fn connect_reject_version_not_supported_roundtrip() {
         supported_version_min: PROTOCOL_VERSION,
         supported_version_max: PROTOCOL_VERSION,
     };
-    let bytes = minicbor::to_vec(&reject).expect("encode reject");
+    let bytes = minicbor::to_vec(reject).expect("encode reject");
     let decoded: ConnectReject = minicbor::decode(&bytes).expect("decode reject");
-    assert!(matches!(decoded.reason, ConnectRejectReason::VersionNotSupported));
+    assert!(matches!(
+        decoded.reason,
+        ConnectRejectReason::VersionNotSupported
+    ));
     assert_eq!(decoded.supported_version_min, PROTOCOL_VERSION);
     assert_eq!(decoded.supported_version_max, PROTOCOL_VERSION);
 }

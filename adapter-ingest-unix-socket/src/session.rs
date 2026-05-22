@@ -8,8 +8,8 @@ use ingest_protocol::{
     perform_server_handshake_with_auth, ConnectAuthoriser, HandshakeError, HandshakeOutcome,
     InboundAction, PostHandshakeProcessor, ProtocolError,
 };
+use otk_protocol::OtkEnvelope;
 use port_in_ingest::{IngestError, IngestSession};
-use protocol::OtkEnvelope;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
@@ -99,13 +99,15 @@ impl UnixSocketIngestSession {
 impl IngestSession for UnixSocketIngestSession {
     async fn next_event(&mut self) -> Result<Option<OtkEvent>, IngestError> {
         loop {
-            if self.pending.is_empty() {
-                if !self.fill_pending().await? {
-                    return Ok(None);
-                }
+            if self.pending.is_empty() && !self.fill_pending().await? {
+                return Ok(None);
             }
             let envelope = self.pending.pop_front().expect("just filled or non-empty");
-            match self.processor.process(envelope).map_err(protocol_err_to_ingest)? {
+            match self
+                .processor
+                .process(envelope)
+                .map_err(protocol_err_to_ingest)?
+            {
                 InboundAction::Event(event) => return Ok(Some(event)),
                 InboundAction::Heartbeat => continue,
                 InboundAction::Disconnect => return Ok(None),

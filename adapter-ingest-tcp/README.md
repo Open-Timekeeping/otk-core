@@ -1,6 +1,6 @@
 # adapter-ingest-tcp
 
-TCP ingest adapter for OTK. Implements [`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest) over plain TCP, accepting producer connections and delivering typed events to the timing node.
+TCP ingest adapter for OTK. Implements [`port-in-ingest`](../port-in-ingest) over plain TCP, accepting producer connections and delivering typed events to the timing node.
 
 > **Status: active.** Wraps the upstream `frame-codec` + `ingest-protocol` crates with TCP socket lifecycle. See [open questions](#open-questions) for deferred items.
 
@@ -10,25 +10,25 @@ TCP ingest adapter for OTK. Implements [`port-in-ingest`](https://github.com/Ope
 
 The adapter is intentionally thin: it owns TCP accept loop and per-session byte I/O, and delegates everything else upward:
 
-- **Framing** (length-prefix, partial-read buffering, oversize / truncation detection) → [`frame_codec::StreamFrameDecoder`](https://github.com/Open-Timekeeping/otk-core/tree/main/frame-codec) + `encode_stream`.
-- **Handshake and post-handshake envelope dispatch** → [`ingest_protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/ingest-protocol): `perform_server_handshake_with_auth`, `PostHandshakeProcessor`, `InboundAction`.
+- **Framing** (length-prefix, partial-read buffering, oversize / truncation detection) → [`frame_codec::StreamFrameDecoder`](../frame-codec) + `encode_stream`.
+- **Handshake and post-handshake envelope dispatch** → [`ingest_protocol`](../ingest-protocol): `perform_server_handshake_with_auth`, `PostHandshakeProcessor`, `InboundAction`.
 
 The timing node receives typed `OtkEvent` values and never sees raw frames or protocol envelopes.
 
 ## Where this sits in the architecture
 
 ```text
-otk-core (one repo, many crates)
+protocol-layer and contract crates
   event-model/              domain DTOs (OtkEvent, Detection, ...)
-  protocol/                 wire DTOs (OtkEnvelope, Connect, ConnectAck, ...)
+  otk-protocol/             wire DTOs (OtkEnvelope, Connect, ConnectAck, ...)
   frame-codec/              length-prefix + COBS frame codecs
   ingest-protocol/          transport-agnostic handshake + dispatch state machine
   port-in-ingest/           inbound port contract (EventIngestPort, IngestSession)
-adapter-ingest-tcp/         this repo: TCP socket lifecycle around the above
+adapter-ingest-tcp/         this crate: TCP socket lifecycle around the above
 timing-node/                injects this adapter at startup
 ```
 
-The timing node depends on `port-in-ingest` (the trait), not on this crate directly. This crate is the concrete adapter injected at the composition root.
+The timing node's **pipeline logic** depends only on the [`port-in-ingest`](../port-in-ingest) trait, never on this crate's concrete types. `timing-node` itself, as the composition root, does pull this crate in as a Cargo dependency to construct the concrete `TcpIngestPort` and hand it to the pipeline behind the trait object. The hexagonal boundary is at the runtime / pipeline seam, not at the binary's dependency graph.
 
 ## Design decisions
 
@@ -44,16 +44,16 @@ The timing node depends on `port-in-ingest` (the trait), not on this crate direc
 
 ## Development
 
-This crate uses sibling-relative path deps to `otk-core`:
+This crate uses sibling-relative path deps within the workspace:
 
 ```toml
-port-in-ingest  = { path = "../otk-core/port-in-ingest" }
-frame-codec     = { path = "../otk-core/frame-codec" }
-ingest-protocol = { path = "../otk-core/ingest-protocol" }
+port-in-ingest  = { path = "../port-in-ingest" }
+frame-codec     = { path = "../frame-codec" }
+ingest-protocol = { path = "../ingest-protocol" }
 # ...
 ```
 
-Local development expects the standard Open Timekeeping workspace layout: each repo cloned as a sibling under one parent directory. From a fresh clone of just this repo, `cargo build` will fail until `otk-core` is present alongside it. See [`open-timekeeping/AGENTS.md`](https://github.com/Open-Timekeeping/.github) for the workspace conventions. Crates.io / published-version deps will replace path deps once the `otk-core` crates publish.
+Local development expects the consolidated workspace layout. `cargo build` from the workspace root builds every crate. See the workspace-root [`AGENTS.md`](../AGENTS.md) for conventions.
 
 ## Usage
 
@@ -87,9 +87,9 @@ loop {
 
 ## Dependencies
 
-**Depends on:** [`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest), [`protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/protocol), [`event-model`](https://github.com/Open-Timekeeping/otk-core/tree/main/event-model), [`frame-codec`](https://github.com/Open-Timekeeping/otk-core/tree/main/frame-codec), [`ingest-protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/ingest-protocol), `async-trait`, `tokio`.
+**Depends on:** [`port-in-ingest`](../port-in-ingest), [`protocol`](../otk-protocol), [`event-model`](../event-model), [`frame-codec`](../frame-codec), [`ingest-protocol`](../ingest-protocol), `async-trait`, `tokio`.
 
-**Used by:** [`timing-node`](https://github.com/Open-Timekeeping/timing-node) as its default ingest transport.
+**Used by:** [`timing-node`](../timing-node) as its default ingest transport.
 
 ## Open questions
 

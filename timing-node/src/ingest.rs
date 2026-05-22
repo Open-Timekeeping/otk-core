@@ -80,12 +80,16 @@ pub async fn run_listener(
             // Reap finished session tasks during the accept loop so a
             // long-running node with many short-lived producer sessions
             // doesn't accumulate `JoinSet` entries forever and leak
-            // memory between shutdowns. `JoinSet::join_next()` is
-            // `Pending` whenever the set is empty, so this arm never
-            // fires on an idle listener and never starves the accept
-            // arm; whenever a session finishes, the next iteration of
-            // the loop drains its slot. Panics still surface (here, at
-            // error level) just like they would have at shutdown drain.
+            // memory between shutdowns. `JoinSet::join_next()` resolves
+            // to `None` immediately when the set is empty (not Pending),
+            // so this arm relies on the `Some(res) = ...` pattern guard
+            // to disable itself in that case rather than parking. When
+            // the set is empty the arm is skipped and `select!` waits
+            // on the other arms only, so an idle listener doesn't spin
+            // here and accept isn't starved. Once a session finishes,
+            // the next iteration's join_next() returns Some(res) and
+            // the slot is drained. Panics still surface (here, at error
+            // level) just like they would at shutdown drain.
             Some(res) = tasks.join_next() => {
                 match res {
                     Ok(()) => {
@@ -125,7 +129,10 @@ pub async fn run_listener(
             }
         }
     };
-    if tokio::time::timeout(std::time::Duration::from_secs(5), drain).await.is_err() {
+    if tokio::time::timeout(std::time::Duration::from_secs(5), drain)
+        .await
+        .is_err()
+    {
         tracing::warn!(listener = %listener_id, "shutdown: drain timed out; forcing sessions closed");
     }
 }

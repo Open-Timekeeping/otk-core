@@ -2,13 +2,13 @@
 
 The Open Timekeeping standard and conceptual model. Defines terminology, semantics, and the architectural shape every implementation must conform to.
 
-> **Status: standards seed.** Initial terminology and conceptual content lives here; technical specs are added as decisions land. Implementation details belong in their respective implementation repos, not here.
+> **Status: standards seed.** Initial terminology and conceptual content lives here; technical specs are added as decisions land. Implementation details belong in their respective implementation crates within this workspace, not here.
 
 ## What this is
 
 `spec` is the human-readable, implementation-neutral source of truth for what *Open Timekeeping* means. It explains the conceptual model behind the system, detectors, timing points, detections, crossings, timebases, runtime nodes, the Timing Fabric, without prescribing how any particular implementation builds them.
 
-A correct implementation of any Open Timekeeping role is one that can be described in the terms this repo defines and that passes the [`conformance`](../conformance) suite.
+A correct implementation of any Open Timekeeping role is one that can be described in the terms this directory defines and that passes the [`conformance`](../conformance) suite.
 
 ## What belongs here
 
@@ -20,19 +20,19 @@ A correct implementation of any Open Timekeeping role is one that can be describ
 
 ## What does not belong here
 
-- OTK message envelope byte layouts (→ [`otk-core/protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/protocol)).
-- Frame encode/decode and framing format, including the `no_std` + `alloc` path used by firmware (→ [`otk-core/frame-codec`](https://github.com/Open-Timekeeping/otk-core/tree/main/frame-codec)).
-- Transport-binding-specific code (→ per-transport adapter repos: [`adapter-ingest-tcp`](https://github.com/Open-Timekeeping/adapter-ingest-tcp), [`adapter-ingest-unix-socket`](https://github.com/Open-Timekeeping/adapter-ingest-unix-socket), and future serial / USB-CDC / RS-485 / etc.).
-- Concrete event/schema definitions (→ [`otk-core/event-model`](https://github.com/Open-Timekeeping/otk-core/tree/main/event-model)).
-- Trait signatures, function names, or other implementation API surface (→ the respective `otk-core` contract crate: [`otk-contracts`](https://github.com/Open-Timekeeping/otk-core/tree/main/otk-contracts), [`port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest), [`port-out-event-log`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-out-event-log), [`ingest-protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/ingest-protocol)).
-- Runtime configuration, deployment guides, or operational runbooks (→ [`timing-node`](https://github.com/Open-Timekeeping/timing-node) and apps).
-- Vendor-specific protocol details (→ vendor-specific adapter repos, if and when they exist).
+- OTK message envelope byte layouts (→ [`otk-protocol`](../otk-protocol)).
+- Frame encode/decode and framing format, including the `no_std` + `alloc` path used by firmware (→ [`frame-codec`](../frame-codec)).
+- Transport-binding-specific code (→ per-transport adapter crates: [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket), and future serial / USB-CDC / RS-485 / etc.).
+- Concrete event/schema definitions (→ [`event-model`](../event-model)).
+- Trait signatures, function names, or other implementation API surface (→ the respective contract crate: [`otk-contracts`](../otk-contracts), [`port-in-ingest`](../port-in-ingest), [`port-out-event-log`](../port-out-event-log), [`ingest-protocol`](../ingest-protocol)).
+- Runtime configuration, deployment guides, or operational runbooks (→ [`timing-node`](../timing-node) and apps).
+- Vendor-specific protocol details (→ vendor-specific adapter crates, if and when they exist).
 
 ## Dependencies
 
 **Depends on:** none. `spec` is at the top of the conceptual graph.
 
-**Commonly depended on by:** every implementation repo references `spec` for terminology; [`conformance`](../conformance) bases its suite on it.
+**Commonly depended on by:** every implementation crate references `spec` for terminology; [`conformance`](../conformance) bases its suite on it.
 
 ## Relationship to the architecture
 

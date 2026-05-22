@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use protocol::OtkEnvelope;
+use otk_protocol::OtkEnvelope;
 
 use crate::error::FrameError;
 
@@ -16,7 +16,10 @@ pub fn encode_stream(envelope: &OtkEnvelope, max_frame_size: usize) -> Result<Ve
     // what the caller passes as max_frame_size, so clamp to produce an accurate error.
     let effective_max = max_frame_size.min(u32::MAX as usize);
     if payload.len() > effective_max {
-        return Err(FrameError::OversizeFrame { len: Some(payload.len()), max: effective_max });
+        return Err(FrameError::OversizeFrame {
+            len: Some(payload.len()),
+            max: effective_max,
+        });
     }
     // payload.len() <= effective_max <= u32::MAX, so the cast is exact on all targets.
     let mut out = Vec::with_capacity(4 + payload.len());
@@ -55,7 +58,11 @@ pub struct StreamFrameDecoder {
 
 impl StreamFrameDecoder {
     pub fn new(max_frame_size: usize) -> Self {
-        Self { buf: Vec::new(), max_frame_size, skip_bytes: 0 }
+        Self {
+            buf: Vec::new(),
+            max_frame_size,
+            skip_bytes: 0,
+        }
     }
 
     /// Returns `true` if the decoder is holding bytes from a frame that
@@ -88,7 +95,9 @@ impl StreamFrameDecoder {
         // skip_bytes > 0 at the start of a call (invariant maintained below).
         let bytes = if self.skip_bytes > 0 {
             debug_assert!(self.buf.is_empty());
-            let skip = bytes.len().min(usize::try_from(self.skip_bytes).unwrap_or(usize::MAX));
+            let skip = bytes
+                .len()
+                .min(usize::try_from(self.skip_bytes).unwrap_or(usize::MAX));
             self.skip_bytes -= skip as u64;
             &bytes[skip..]
         } else {
@@ -123,7 +132,10 @@ impl StreamFrameDecoder {
             // is exact on all targets.
             if (len_u32 as u64) > (self.max_frame_size as u64) {
                 let len = usize::try_from(len_u32).ok(); // None only on 16-bit targets
-                results.push(Err(FrameError::OversizeFrame { len, max: self.max_frame_size }));
+                results.push(Err(FrameError::OversizeFrame {
+                    len,
+                    max: self.max_frame_size,
+                }));
                 pos += 4; // consume the header; payload bytes follow
                 self.skip_bytes = len_u32 as u64;
                 continue;
@@ -147,7 +159,7 @@ impl StreamFrameDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use protocol::{MessageType, OtkEnvelope, ids::ProducerId};
+    use otk_protocol::{ids::ProducerId, MessageType, OtkEnvelope};
 
     fn test_envelope() -> OtkEnvelope {
         OtkEnvelope {
@@ -198,7 +210,10 @@ mod tests {
         let frame = encode_stream(&original, crate::DEFAULT_MAX_FRAME_SIZE).unwrap();
         let mut dec = StreamFrameDecoder::new(crate::DEFAULT_MAX_FRAME_SIZE);
         let _ = dec.push(&frame);
-        assert!(!dec.has_pending(), "decoder buffer should be empty after a complete frame");
+        assert!(
+            !dec.has_pending(),
+            "decoder buffer should be empty after a complete frame"
+        );
     }
 
     #[test]
@@ -210,7 +225,10 @@ mod tests {
         input.extend_from_slice(&[0xAAu8; 10]);
         let results = dec.push(&input);
         assert_eq!(results.len(), 1);
-        assert!(matches!(results[0], Err(crate::FrameError::OversizeFrame { .. })));
+        assert!(matches!(
+            results[0],
+            Err(crate::FrameError::OversizeFrame { .. })
+        ));
         // Still has ~990 bytes left to skip from the oversize frame.
         assert!(dec.has_pending());
     }
@@ -228,7 +246,9 @@ mod tests {
         }
 
         assert_eq!(all_results.len(), 1);
-        let decoded = all_results[0].as_ref().expect("incremental round-trip failed");
+        let decoded = all_results[0]
+            .as_ref()
+            .expect("incremental round-trip failed");
         assert_eq!(
             minicbor::to_vec(&original).unwrap(),
             minicbor::to_vec(decoded).unwrap(),

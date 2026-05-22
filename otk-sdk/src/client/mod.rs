@@ -4,6 +4,9 @@
 //! `GET /api/v1/events/stream`. Currently a stub pending the timing-node
 //! REST API implementation.
 
+// The client::client naming mirrors producer/producer: `OtkClient` is the
+// headline type, re-exported below as `client::OtkClient`.
+#[allow(clippy::module_inception)]
 pub mod client;
 pub mod error;
 

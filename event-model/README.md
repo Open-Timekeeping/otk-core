@@ -14,9 +14,9 @@ Used by detector adapters, timing-node, timing-core, simulators, conformance fix
 
 ```text
 Event Model      -> event-model               <-- this crate
-Wire Protocol    -> protocol
-Frame Codec      -> adapter-ingest-tcp (server), embedded-wire (firmware)
-Transport Binding-> port-in-ingest + adapter-* implementations
+Wire Protocol    -> otk-protocol
+Frame Codec      -> frame-codec
+Transport Binding-> port-in-ingest + adapter-ingest-* implementations
 ```
 
 The types defined here are what the OTK message envelope wraps. They have no transport assumptions; the same `Detection` is canonical whether it travels over TCP, USB CDC, or never leaves a runtime node's process at all.
@@ -38,27 +38,26 @@ The types defined here are what the OTK message envelope wraps. They have no tra
 - Timestamp fields (`detected_at_ns: u64`, `detected_at_uncertainty_ns: Option<u64>`, `received_at_ns: Option<u64>`).
 - `TimestampingMethod`, `SourceAttestation`, `SyncState` enums.
 - Provenance fields (timestamping method, timebase reference, source attestation).
-- Timebase references are deployment-level identities, addressable across nodes. Two events that reference the same timebase identity assert directly comparable timestamps. See [`spec/architecture.md § Timebases are physical references`](https://github.com/Open-Timekeeping/spec/blob/main/architecture.md).
+- Timebase references are deployment-level identities, addressable across nodes. Two events that reference the same timebase identity assert directly comparable timestamps. See [`spec/architecture.md § Timebases are physical references`](../spec/architecture.md).
 - `DetectorHealthEvent`, `TimebaseStatusEvent`, `AdapterMetadataEvent`.
 - `OtkEvent`: top-level enum wrapping all event kinds for the wire protocol.
 
 ## What does not belong here
 
-- OTK message envelope and protocol-level message types, in [`protocol`](../protocol).
-- Encode/decode of OTK messages into byte frames, in `adapter-ingest-tcp` (server side) and [`embedded-wire`](../embedded-wire) (firmware side).
-- Transport-specific code (sockets, USB enumeration, etc.), in [`port-in-ingest`](../port-in-ingest) and `adapter-*` implementations.
-- Trait definitions for adapters or plugins, in [`detector-adapter-api`](../detector-adapter-api), [`timebase-api`](../timebase-api), [`plugin-api`](../plugin-api).
-- Producer-side connection / retry helpers, in [`otk-ingest-client`](../otk-ingest-client).
-- Application-layer DTOs for apps and external consumers, in [`api-model`](../api-model).
-- Runtime ingestion, projection, or storage logic, in [`timing-node`](../timing-node), [`timing-core`](../timing-core).
+- OTK message envelope and protocol-level message types: [`otk-protocol`](../otk-protocol).
+- Encode/decode of OTK messages into byte frames: [`frame-codec`](../frame-codec). Used by every transport-binding adapter; also `no_std` + `alloc`-friendly so it can run inside firmware producers.
+- Transport-specific code (sockets, USB enumeration, etc.): [`port-in-ingest`](../port-in-ingest) and the per-transport `adapter-ingest-*` crates ([`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket)).
+- Trait contracts for detector adapters and timebases: [`otk-contracts`](../otk-contracts).
+- Producer-side connection / retry helpers: [`otk-sdk`](../otk-sdk) (its `producer` feature).
+- Runtime ingestion, projection, or storage logic: [`timing-node`](../timing-node), [`timing-core`](../timing-core).
 
 ## Dependencies
 
-**Depends on:** [`spec`](../spec) for terminology.
+**Depends on:** [`spec/`](../spec) for terminology.
 
-**Commonly depended on by:** [`protocol`](../protocol), [`embedded-wire`](../embedded-wire), [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk), [`timebase-api`](../timebase-api), [`plugin-api`](../plugin-api), [`timing-core`](../timing-core), [`timing-node`](https://github.com/Open-Timekeeping/timing-node), every adapter, the simulator, conformance.
+**Commonly depended on by:** [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec), [`otk-contracts`](../otk-contracts), [`otk-sdk`](../otk-sdk), [`timing-core`](../timing-core), [`timing-node`](../timing-node), every adapter, the simulator, conformance.
 
-For local Rust development, sibling crates depend via `event-model = { path = "../event-model" }`.
+Within this Cargo workspace, members depend on `event-model` via `event-model = { path = "../event-model" }` or `event-model = { workspace = true }`.
 
 ## Relationship to the architecture
 
@@ -67,7 +66,7 @@ Every event flowing through the Timing Fabric, produced by any detector adapter,
 ## Open questions
 
 - `detected_at` vs `received_at` required-vs-optional rules per sensor tier.
-- Sequence-number scope: per-detector monotonic is the current assumption; confirm before wire-protocol stabilises.
+- Sequence-number scope: per-detector monotonic is the current assumption; confirm before the OTK Wire Protocol (see [`otk-protocol`](../otk-protocol)) stabilises.
 - Confidence representation: float 0..1 or enum of quality buckets.
 
 ## License

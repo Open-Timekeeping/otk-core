@@ -1,4 +1,4 @@
-use protocol::{
+use otk_protocol::{
     ids::{CorrelationId, ProducerId},
     Connect, ConnectAck, ConnectReject, ConnectRejectReason, MessageType, OtkEnvelope,
     PROTOCOL_VERSION,
@@ -30,14 +30,22 @@ pub enum HandshakeOutcome {
 /// runtime with a token allow-list passes a custom implementation.
 pub trait ConnectAuthoriser: Send + Sync {
     /// Return `Ok` to accept the producer, `Err(reason)` to reject.
-    fn authorise(&self, producer_id: &ProducerId, token: Option<&str>) -> Result<(), ConnectRejectReason>;
+    fn authorise(
+        &self,
+        producer_id: &ProducerId,
+        token: Option<&str>,
+    ) -> Result<(), ConnectRejectReason>;
 }
 
 /// Default authoriser: accept every producer regardless of token.
 pub struct AllowAll;
 
 impl ConnectAuthoriser for AllowAll {
-    fn authorise(&self, _producer_id: &ProducerId, _token: Option<&str>) -> Result<(), ConnectRejectReason> {
+    fn authorise(
+        &self,
+        _producer_id: &ProducerId,
+        _token: Option<&str>,
+    ) -> Result<(), ConnectRejectReason> {
         Ok(())
     }
 }
@@ -46,9 +54,7 @@ impl ConnectAuthoriser for AllowAll {
 ///
 /// Equivalent to [`perform_server_handshake_with_auth`] with the [`AllowAll`]
 /// authoriser. Retained for adapters that don't need auth wiring yet.
-pub fn perform_server_handshake(
-    envelope: OtkEnvelope,
-) -> Result<HandshakeOutcome, HandshakeError> {
+pub fn perform_server_handshake(envelope: OtkEnvelope) -> Result<HandshakeOutcome, HandshakeError> {
     handshake_inner(envelope, PROTOCOL_VERSION, &AllowAll)
 }
 
@@ -58,18 +64,6 @@ pub fn perform_server_handshake_with_auth(
     authoriser: &dyn ConnectAuthoriser,
 ) -> Result<HandshakeOutcome, HandshakeError> {
     handshake_inner(envelope, PROTOCOL_VERSION, authoriser)
-}
-
-/// Variant exposing the server version explicitly. Useful for unit tests
-/// that need to simulate an older or newer server build.
-///
-/// Not part of the stable public API: kept `pub(crate)` so the in-crate
-/// tests can reach it without committing to a semver-stable surface.
-pub(crate) fn handshake_with_server_version(
-    envelope: OtkEnvelope,
-    server_version: u8,
-) -> Result<HandshakeOutcome, HandshakeError> {
-    handshake_inner(envelope, server_version, &AllowAll)
 }
 
 fn handshake_inner(
@@ -118,7 +112,9 @@ fn handshake_inner(
         return Ok(HandshakeOutcome::Rejected { reply, reason });
     }
 
-    let ack = ConnectAck { negotiated_version: server_version };
+    let ack = ConnectAck {
+        negotiated_version: server_version,
+    };
     let reply = build_ack_envelope(&ack, server_version, echo_correlation)?;
     let processor = PostHandshakeProcessor::new(producer_id, server_version);
 
@@ -149,7 +145,12 @@ fn build_ack_envelope(
 ) -> Result<OtkEnvelope, HandshakeError> {
     let payload = minicbor::to_vec(ack)
         .map_err(|e| HandshakeError::EncodeFailed(format!("ConnectAck: {e}")))?;
-    Ok(server_envelope(MessageType::ConnectAck, Some(payload), version, correlation_id))
+    Ok(server_envelope(
+        MessageType::ConnectAck,
+        Some(payload),
+        version,
+        correlation_id,
+    ))
 }
 
 fn build_reject_envelope(
@@ -159,13 +160,18 @@ fn build_reject_envelope(
 ) -> Result<OtkEnvelope, HandshakeError> {
     let payload = minicbor::to_vec(reject)
         .map_err(|e| HandshakeError::EncodeFailed(format!("ConnectReject: {e}")))?;
-    Ok(server_envelope(MessageType::ConnectReject, Some(payload), version, correlation_id))
+    Ok(server_envelope(
+        MessageType::ConnectReject,
+        Some(payload),
+        version,
+        correlation_id,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use protocol::{Connect, MessageType, OtkEnvelope};
+    use otk_protocol::{Connect, MessageType, OtkEnvelope};
 
     fn connect_envelope(min: u8, max: u8, producer_id: &str) -> OtkEnvelope {
         let connect = Connect {
@@ -189,7 +195,10 @@ mod tests {
     fn accepts_version_in_range() {
         let env = connect_envelope(0, u8::MAX, "p-1");
         match perform_server_handshake(env).unwrap() {
-            HandshakeOutcome::Accepted { reply, processor: _ } => {
+            HandshakeOutcome::Accepted {
+                reply,
+                processor: _,
+            } => {
                 assert_eq!(reply.message_type, MessageType::ConnectAck);
                 let ack: ConnectAck = minicbor::decode(reply.payload.as_deref().unwrap()).unwrap();
                 assert_eq!(ack.negotiated_version, PROTOCOL_VERSION);
@@ -255,10 +264,8 @@ mod tests {
             token: Option<&str>,
         ) -> Result<(), ConnectRejectReason> {
             self.called.store(true, Ordering::SeqCst);
-            *self.last_call.lock().unwrap() = Some((
-                producer_id.to_string(),
-                token.map(|s| s.to_string()),
-            ));
+            *self.last_call.lock().unwrap() =
+                Some((producer_id.to_string(), token.map(|s| s.to_string())));
             self.decision
         }
     }
@@ -324,6 +331,9 @@ mod tests {
         let auth = RecordingAuthoriser::new(Ok(()));
         let bad_version_env = connect_envelope(99, 99, "prod-7");
         let _ = perform_server_handshake_with_auth(bad_version_env, &auth).expect("handshake");
-        assert!(!auth.called.load(Ordering::SeqCst), "authoriser should not run on version-mismatch path");
+        assert!(
+            !auth.called.load(Ordering::SeqCst),
+            "authoriser should not run on version-mismatch path"
+        );
     }
 }

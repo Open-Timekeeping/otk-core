@@ -17,20 +17,16 @@ Concretely:
 ## Where this sits in the architecture
 
 ```text
-server/
-  core/
-    event-model/            domain DTOs (OtkEvent, Detection, ...)
-    protocol/               wire DTOs (OtkEnvelope, MessageType, ...)
-  ports/
-    port-in-ingest/         inbound port contract   <-- this repo
-    port-out-event-log/     outbound port contract
-  adapters/
-    adapter-ingest-tcp/     implements port-in-ingest over TCP
-  app/
-    timing-node/            depends on this port; injects the adapter
+event-model/                domain DTOs (OtkEvent, Detection, ...)
+otk-protocol/               wire DTOs (OtkEnvelope, MessageType, ...)
+port-in-ingest/             inbound port contract                  <-- this crate
+port-out-event-log/         outbound port contract
+adapter-ingest-tcp/         implements port-in-ingest over TCP
+adapter-ingest-unix-socket/ implements port-in-ingest over AF_UNIX
+timing-node/                depends on this port; injects the adapter at startup
 ```
 
-The timing node depends on `port-in-ingest` (the trait), not on any adapter directly. Adapters are the composition root's concern.
+The timing node's **pipeline logic** (sequence gate, crossing processor, event log writes) depends only on the `port-in-ingest` trait, never on any adapter's concrete types. `timing-node` itself, as the composition root binary, does pull each enabled adapter in as a Cargo dependency to construct the concrete port and hand it to the pipeline behind the trait object. The hexagonal boundary is at the pipeline / port seam, not at the binary's dependency graph.
 
 ## Design decisions
 

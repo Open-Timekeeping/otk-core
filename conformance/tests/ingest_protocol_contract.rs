@@ -97,7 +97,7 @@ fn processor_dispatches_event_payload_to_action() {
     let proc = PostHandshakeProcessor::new(ProducerId::from("p-1"), PROTOCOL_VERSION);
     let env = data_envelope(
         MessageType::Event,
-        Some(minicbor::to_vec(&test_event()).unwrap()),
+        Some(minicbor::to_vec(test_event()).unwrap()),
         "p-1",
     );
     match proc.process(env).expect("process") {
@@ -111,10 +111,18 @@ fn processor_collapses_heartbeat_and_disconnect() {
     let proc = PostHandshakeProcessor::new(ProducerId::from("p-1"), PROTOCOL_VERSION);
     // Per the OtkEnvelope contract, Heartbeat carries a CBOR-encoded Heartbeat payload;
     // only Disconnect is payload-less.
-    let hb_payload = minicbor::to_vec(&otk_protocol::Heartbeat { sent_at_ns: 0 }).unwrap();
-    let hb = proc.process(data_envelope(MessageType::Heartbeat, Some(hb_payload), "p-1")).unwrap();
+    let hb_payload = minicbor::to_vec(otk_protocol::Heartbeat { sent_at_ns: 0 }).unwrap();
+    let hb = proc
+        .process(data_envelope(
+            MessageType::Heartbeat,
+            Some(hb_payload),
+            "p-1",
+        ))
+        .unwrap();
     assert!(matches!(hb, InboundAction::Heartbeat));
-    let dc = proc.process(data_envelope(MessageType::Disconnect, None, "p-1")).unwrap();
+    let dc = proc
+        .process(data_envelope(MessageType::Disconnect, None, "p-1"))
+        .unwrap();
     assert!(matches!(dc, InboundAction::Disconnect));
 }
 
@@ -125,7 +133,7 @@ fn processor_rejects_source_spoofing() {
     // the spoofed source_id. Without this, a bare Heartbeat would be
     // rejected with MissingHeartbeatPayload and the test would pass for
     // the wrong reason (masking a regression in the source-id check).
-    let hb_payload = minicbor::to_vec(&otk_protocol::Heartbeat { sent_at_ns: 0 }).unwrap();
+    let hb_payload = minicbor::to_vec(otk_protocol::Heartbeat { sent_at_ns: 0 }).unwrap();
     let env = data_envelope(MessageType::Heartbeat, Some(hb_payload), "evil");
     let err = proc.process(env).expect_err("source mismatch must error");
     assert!(

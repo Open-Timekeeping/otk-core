@@ -27,7 +27,7 @@ The canonical collection of test inputs and expected outputs used by [`conforman
 
 **Depends on:** [`event-model`](../event-model), [`spec`](../spec).
 
-**Commonly depended on by:** [`conformance`](../conformance), [`detector-simulator`](../detector-simulator) (replay-from-fixtures), runtime / adapter test suites.
+**Commonly depended on by:** [`conformance`](../conformance), runtime / adapter test suites. A replay-from-fixtures simulator is planned (would extend [`producer-simulated`](../producer-simulated) or live alongside it) but does not exist yet.
 
 ## License
 

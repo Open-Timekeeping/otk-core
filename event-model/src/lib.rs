@@ -36,8 +36,7 @@ pub use crossing::CrossingEvent;
 pub use detection::{Detection, SensorData};
 pub use health::{DetectorHealthEvent, DetectorHealthStatus, TimebaseStatusEvent};
 pub use ids::{
-    CrossingId, DetectionId, DetectorId, OperatorId, StreamId, SubjectId, TimebaseId,
-    TimingPointId,
+    CrossingId, DetectionId, DetectorId, OperatorId, StreamId, SubjectId, TimebaseId, TimingPointId,
 };
 pub use metadata::{AdapterCapabilities, AdapterMetadataEvent};
 pub use stream::{StreamDescriptor, StreamKind};

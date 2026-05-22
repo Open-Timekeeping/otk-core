@@ -1,4 +1,6 @@
-use otk_sdk::producer::{adapter_event_to_otk, DetectorAdapter, Producer, ProducerConfig, Transport};
+use otk_sdk::producer::{
+    adapter_event_to_otk, DetectorAdapter, Producer, ProducerConfig, Transport,
+};
 use tracing::{error, info, warn};
 
 /// Run a detector adapter to completion, publishing all events to a timing node.
@@ -18,7 +20,10 @@ pub async fn run<A: DetectorAdapter>(
     let mut producer = match Producer::connect(transport, producer_config).await {
         Ok(p) => p,
         Err(e) => {
-            adapter.stop().await.unwrap_or_else(|e| warn!("stop error: {e}"));
+            adapter
+                .stop()
+                .await
+                .unwrap_or_else(|e| warn!("stop error: {e}"));
             return Err(e.into());
         }
     };
@@ -64,7 +69,10 @@ pub async fn run<A: DetectorAdapter>(
         }
     }
 
-    adapter.stop().await.unwrap_or_else(|e| warn!("stop error: {e}"));
+    adapter
+        .stop()
+        .await
+        .unwrap_or_else(|e| warn!("stop error: {e}"));
     producer.disconnect().await?;
     info!("disconnected");
     Ok(())

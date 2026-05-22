@@ -1,6 +1,6 @@
 # adapter-event-log-segment
 
-Segment-file event log backend for Open Timekeeping. Implements the `EventLog` trait from [`port-out-event-log`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-out-event-log) using fixed-budget segment files on local disk.
+Segment-file event log backend for Open Timekeeping. Implements the `EventLog` trait from [`port-out-event-log`](../port-out-event-log) using fixed-budget segment files on local disk.
 
 > **Status: active.** Core implementation is complete: segment format, offset index, retention, crash recovery, live subscriptions. See [open questions](#open-questions) for deferred items.
 
@@ -11,16 +11,12 @@ Segment-file event log backend for Open Timekeeping. Implements the `EventLog` t
 ## Where this sits in the architecture
 
 ```text
-server/
-  ports/
-    port-out-event-log/          outbound port contract (EventLog trait)
-  adapters/
-    adapter-event-log-segment/   implements port-out-event-log   <-- this repo
-  app/
-    timing-node/                 injects this adapter at startup
+port-out-event-log/          outbound port contract (EventLog trait)
+adapter-event-log-segment/   implements port-out-event-log     <-- this crate
+timing-node/                 injects this adapter at startup
 ```
 
-`timing-node` depends on the `EventLog` trait from `port-out-event-log`, not on this crate directly. This crate is the concrete backend injected at the composition root.
+The timing node's **pipeline logic** depends on the `EventLog` trait from [`port-out-event-log`](../port-out-event-log), never on this crate's concrete `SegmentLog` type. `timing-node` itself, as the composition root, does pull this crate in as a Cargo dependency to construct the concrete backend and hand it to the pipeline behind the trait object. Swapping in an alternative storage backend (a different `port-out-event-log` impl) only touches the composition root; the pipeline is unchanged.
 
 ## Design decisions
 
@@ -58,9 +54,9 @@ async fn open_log() -> Result<(), port_out_event_log::StorageError> {
 
 ## Dependencies
 
-**Depends on:** [`port-out-event-log`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-out-event-log), [`event-model`](https://github.com/Open-Timekeeping/otk-core/tree/main/event-model), `async-trait`, `minicbor`, `crc32fast`, `tokio`.
+**Depends on:** [`port-out-event-log`](../port-out-event-log), [`event-model`](../event-model), `async-trait`, `minicbor`, `crc32fast`, `tokio`.
 
-**Used by:** [`timing-node`](https://github.com/Open-Timekeeping/timing-node) as its default storage backend.
+**Used by:** [`timing-node`](../timing-node) as its default storage backend.
 
 ## Open questions
 

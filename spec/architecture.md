@@ -63,25 +63,25 @@ Three things to note:
 
 ## OTK Protocol is transport-independent
 
-The **OTK Protocol** is the transport-independent wire protocol used by Open Timekeeping components to exchange canonical timing messages. It is **not** TCP, not HTTP, not a specific socket type. It is defined as four stacked layers; each layer has its own contract and its own crate. The top three (Event Model, Wire Protocol, Frame Codec) live as member crates of the [`otk-core`](https://github.com/Open-Timekeeping/otk-core) workspace; transport-binding crates live in per-transport adapter repos.
+The **OTK Protocol** is the transport-independent wire protocol used by Open Timekeeping components to exchange canonical timing messages. It is **not** TCP, not HTTP, not a specific socket type. It is defined as four stacked layers; each layer has its own contract and its own crate. The top three (Event Model, Wire Protocol, Frame Codec) live as crates in this workspace; transport-binding crates live in per-transport adapter crates.
 
 ```text
 +----------------------------------------------------+
 | Event Model                                        |
 |   Canonical Open Timekeeping events and identifiers|
-|   (otk-core/event-model)                           |
+|   (crate: event-model)                             |
 +----------------------------------------------------+
 | Wire Protocol                                      |
 |   OTK message envelope: versioning, message types, |
 |   source identity, sequence numbers,               |
 |   acknowledgements, error messages, compatibility  |
-|   (otk-core/protocol, crate `otk-protocol`)        |
+|   (crate: otk-protocol)                            |
 +----------------------------------------------------+
 | Frame Codec                                        |
 |   How OTK messages are encoded into frames and     |
 |   decoded from frames; stream-oriented and         |
 |   resynchronizable framing                         |
-|   (otk-core/frame-codec)                           |
+|   (crate: frame-codec)                             |
 +----------------------------------------------------+
 | Transport Binding                                  |
 |   How frames move over a specific link             |
@@ -90,43 +90,42 @@ The **OTK Protocol** is the transport-independent wire protocol used by Open Tim
 +----------------------------------------------------+
 ```
 
-A fifth crate, [`otk-core/ingest-protocol`](https://github.com/Open-Timekeeping/otk-core/tree/main/ingest-protocol), holds the transport-agnostic server-side state machine that drives the handshake and post-handshake envelope dispatch on top of those four layers. Per-transport ingest adapters consume `frame-codec` + `ingest-protocol` and are reduced to socket lifecycle plus byte I/O.
+A fifth crate, [`ingest-protocol`](../ingest-protocol), holds the transport-agnostic server-side state machine that drives the handshake and post-handshake envelope dispatch on top of those four layers. Per-transport ingest adapters consume `frame-codec` + `ingest-protocol` and are reduced to socket lifecycle plus byte I/O.
 
 The layering matters:
 
 - A device that can emit OTK frames directly already implements the adapter role; no node-side adapter is required.
 - A device that cannot emit OTK frames needs an adapter (firmware, external process, or plugin) that translates device-native output into Open Timekeeping events and frames.
 - A runtime node can ingest from multiple transport bindings concurrently. Internally, every transport binding feeds the same canonical ingest pipeline.
-- Adding a new transport binding (e.g., RS-485, CAN, raw Ethernet) is a new repo at the Transport Binding layer. The Event Model, Wire Protocol, and Frame Codec do not change.
+- Adding a new transport binding (e.g., RS-485, CAN, raw Ethernet) is a new crate at the Transport Binding layer. The Event Model, Wire Protocol, and Frame Codec do not change.
 
 ---
 
 ## The contracts every implementation meets
 
-Open Timekeeping is held together by a small set of normative contracts. Most live as member crates of [`otk-core`](https://github.com/Open-Timekeeping/otk-core); the per-transport-binding contract is shared by every transport adapter through [`otk-core/port-in-ingest`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-in-ingest).
+Open Timekeeping is held together by a small set of normative contracts. Most live as crates in this workspace; the per-transport-binding contract is shared by every transport adapter through [`port-in-ingest`](../port-in-ingest).
 
-1. **`otk-core/event-model`**, canonical event/data shapes. Every event, every identifier, every provenance block in the system is defined here. No transport assumptions; `no_std` + `alloc`.
-2. **`otk-core/protocol`** (crate `otk-protocol`), the OTK message envelope: versioning, message types, source identity, sequence numbers, acknowledgements where applicable, error messages, and compatibility rules. Not bound to any single transport.
-3. **`otk-core/frame-codec`**, encode/decode of OTK messages into byte frames (and back). Provides both length-prefixed stream framing (reliable transports: TCP, Unix socket) and COBS + CRC-16/CCITT-FALSE serial framing (unreliable byte streams: UART, RS-232, RS-485). `no_std` + `alloc`.
-4. **`otk-core/port-in-ingest`**, the common abstraction every transport-binding ingest adapter implements: listener accept loop, session lifecycle, error vocabulary.
-5. **`otk-core/ingest-protocol`**, the transport-agnostic server-side state machine consumed by ingest adapters: handshake negotiation (with pluggable authoriser), post-handshake envelope validation and message-type dispatch.
-6. **`otk-core/otk-contracts`**, the universal trait contracts a third-party implementer compiles against: `DetectorAdapter` and `Timebase`. Dependency-light (no `tokio`, no `minicbor` direct dep) so a vendor adapter can target this surface without inheriting the SDK's transport stack.
+1. **`event-model`**, canonical event/data shapes. Every event, every identifier, every provenance block in the system is defined here. No transport assumptions; `no_std` + `alloc`.
+2. **`otk-protocol`** (crate `otk-protocol`), the OTK message envelope: versioning, message types, source identity, sequence numbers, acknowledgements where applicable, error messages, and compatibility rules. Not bound to any single transport.
+3. **`frame-codec`**, encode/decode of OTK messages into byte frames (and back). Provides both length-prefixed stream framing (reliable transports: TCP, Unix socket) and COBS + CRC-16/CCITT-FALSE serial framing (unreliable byte streams: UART, RS-232, RS-485). `no_std` + `alloc`.
+4. **`port-in-ingest`**, the common abstraction every transport-binding ingest adapter implements: listener accept loop, session lifecycle, error vocabulary.
+5. **`ingest-protocol`**, the transport-agnostic server-side state machine consumed by ingest adapters: handshake negotiation (with pluggable authoriser), post-handshake envelope validation and message-type dispatch.
+6. **`otk-contracts`**, the universal trait contracts a third-party implementer compiles against: `DetectorAdapter` and `Timebase`. Dependency-light (no `tokio`, no `minicbor` direct dep) so a vendor adapter can target this surface without inheriting the SDK's transport stack.
 
 Supporting contracts:
 
-- **`otk-core/port-out-event-log`** sits between the runtime node and its persistence backends. The v0 backend is [`adapter-event-log-segment`](https://github.com/Open-Timekeeping/adapter-event-log-segment); alternatives plug in behind the same trait.
+- **`port-out-event-log`** sits between the runtime node and its persistence backends. The v0 backend is [`adapter-event-log-segment`](../adapter-event-log-segment); alternatives plug in behind the same trait.
 - **`plugin-api`** is reserved for in-process plugin loading. Not yet specified; see [`open-questions.md`](open-questions.md).
 
-If an implementation satisfies the contracts that apply to its role and passes the corresponding [`conformance`](https://github.com/Open-Timekeeping/conformance) suite, it is Open Timekeeping compatible.
+If an implementation satisfies the contracts that apply to its role and passes the corresponding [`conformance`](../conformance) suite, it is Open Timekeeping compatible.
 
 ---
 
 ## Roles and where they live
 
-Most contracts live as member crates inside the [`otk-core`](https://github.com/Open-Timekeeping/otk-core) workspace, which Open Timekeeping ships as one repo with many crates rather than one repo per crate. Implementations (transport adapters, storage backends, SDKs, runtimes, apps) live in their own repos.
+Most contracts live as crates in this single Cargo workspace.
 
-### Inside `otk-core` (one repo, many crates)
-
+### Protocol-layer and contract crates
 | Crate | Role boundary |
 |---|---|
 | `event-model` | Canonical event types and identifiers. No transport assumptions. `no_std` + `alloc`. |
@@ -138,18 +137,18 @@ Most contracts live as member crates inside the [`otk-core`](https://github.com/
 | `port-out-event-log` | Outbound port: every storage backend implements this trait. |
 | `timing-core` | Timing-domain engine: detections → crossings. Pure library; no IO. |
 
-### Repos around `otk-core`
+### Adapter and runtime crates
 
-| Role | Repo | Role boundary |
+| Role | Crate | Role boundary |
 |---|---|---|
-| Standard / conceptual model | [`spec`](https://github.com/Open-Timekeeping/spec) | What Open Timekeeping means. |
-| TCP ingest adapter | [`adapter-ingest-tcp`](https://github.com/Open-Timekeeping/adapter-ingest-tcp) | OTK frames over TCP. |
-| Unix-socket ingest adapter | [`adapter-ingest-unix-socket`](https://github.com/Open-Timekeeping/adapter-ingest-unix-socket) | OTK frames over AF_UNIX (same-host producer/runtime). |
-| Segment-file event log | [`adapter-event-log-segment`](https://github.com/Open-Timekeeping/adapter-event-log-segment) | The v0 storage backend; implements `port-out-event-log`. |
-| Producer/consumer SDK | [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk) | Producer-side `connect`/`send_event` helpers, consumer HTTP/SSE client, builders. Re-exports `otk-contracts`. |
-| Simulated producer | [`producer-simulated`](https://github.com/Open-Timekeeping/producer-simulated) | `otk-simulator` binary: synthetic detector events. |
-| Runtime node | [`timing-node`](https://github.com/Open-Timekeeping/timing-node) | The deployable server (`otk-node` binary): hosts ingest listeners, sequence gate, crossing processor, REST/SSE API, `/healthz` + `/readyz` + `/metrics`. |
-| Conformance | [`conformance`](https://github.com/Open-Timekeeping/conformance), [`conformance-fixtures`](https://github.com/Open-Timekeeping/conformance-fixtures) | Verifies any implementation. |
+| Standard / conceptual model | [`spec`](../spec) | What Open Timekeeping means. (Docs, not a Rust crate.) |
+| TCP ingest adapter | [`adapter-ingest-tcp`](../adapter-ingest-tcp) | OTK frames over TCP. |
+| Unix-socket ingest adapter | [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket) | OTK frames over AF_UNIX (same-host producer/runtime). |
+| Segment-file event log | [`adapter-event-log-segment`](../adapter-event-log-segment) | The v0 storage backend; implements `port-out-event-log`. |
+| Producer/consumer SDK | [`otk-sdk`](../otk-sdk) | Producer-side `connect`/`send_event` helpers, consumer HTTP/SSE client, builders. Re-exports `otk-contracts`. |
+| Simulated producer | [`producer-simulated`](../producer-simulated) | `otk-simulator` binary: synthetic detector events. |
+| Runtime node | [`timing-node`](../timing-node) | The deployable server (`otk-node` binary): hosts ingest listeners, sequence gate, crossing processor, REST/SSE API, `/healthz` + `/readyz` + `/metrics`. |
+| Conformance | [`conformance`](../conformance), [`conformance-fixtures`](../conformance-fixtures) | Verifies any implementation. |
 
 ### Planned / not yet shipped
 
@@ -157,11 +156,11 @@ Most contracts live as member crates inside the [`otk-core`](https://github.com/
 |---|---|
 | Serial / USB-CDC ingest adapters | Planned. Re-use `frame-codec` (serial mode) + `ingest-protocol`. |
 | Live-timing and diagnostics apps | Planned. |
-| Embedded toolkit (RP2040 / STM32 targets, HAL, native detector firmware crates) | Planned. The protocol-layer crates firmware would consume (`event-model`, `otk-protocol`, `frame-codec`) already ship as `no_std` + `alloc` from `otk-core`, so a `target-*` firmware crate is the only missing piece. |
+| Embedded toolkit (RP2040 / STM32 targets, HAL, native detector firmware crates) | Planned. The protocol-layer crates firmware would consume (`event-model`, `otk-protocol`, `frame-codec`) already ship as `no_std` + `alloc`, so a `target-*` firmware crate is the only missing piece. |
 | Plugin loading (`plugin-api`) | Open question; see [`open-questions.md`](open-questions.md). |
 | Additional storage backends (embedded SQL, server SQL, object-store-tiered) | Plug behind `port-out-event-log` when there's a concrete need. |
 
-`timing-core` is a *library*. `timing-node` is the *binary*. Do not conflate them. The producer-side `Producer` connection helper in `otk-sdk` is a *convenience library*; producers may use it, or build directly on `otk-core`'s `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
+`timing-core` is a *library*. `timing-node` is the *binary*. Do not conflate them. The producer-side `Producer` connection helper in `otk-sdk` is a *convenience library*; producers may use it, or build directly on `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
 
 ---
 
@@ -185,7 +184,7 @@ timing-node ingest listener
 canonical ingest pipeline
 ```
 
-The adapter role is implemented in firmware. No node-side detector adapter is required. The firmware encodes canonical events using `otk-core`'s `event-model` + `otk-protocol` + `frame-codec` (all `no_std` + `alloc`) and sends them over a supported transport binding.
+The adapter role is implemented in firmware. No node-side detector adapter is required. The firmware encodes canonical events using `event-model` + `otk-protocol` + `frame-codec` (all `no_std` + `alloc`) and sends them over a supported transport binding.
 
 **Case 2, device does not speak OTK; an external adapter translates.**
 
@@ -230,7 +229,7 @@ external adapter process
 timing-node ingest listener
 ```
 
-The external adapter may use [`otk-sdk`](https://github.com/Open-Timekeeping/otk-sdk)'s `producer` feature for convenience, or build directly on `otk-core`'s `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
+The external adapter may use [`otk-sdk`](../otk-sdk)'s `producer` feature for convenience, or build directly on `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
 
 The four cases combine freely in a single deployment.
 
@@ -277,16 +276,16 @@ Open Timekeeping is designed so that a temporary disconnection at any boundary i
 A detector adapter that disconnects from a runtime node and later reconnects must rejoin, re-register, and resume from a known sequence number with no gaps and no duplicates. The adapter is responsible for buffering its own output locally for the duration of the outage. Firmware, external adapter processes, and plugin-loaded adapters all meet this contract. Sequence numbers are strictly monotonic per detector and persist across reconnects. This is the analogue of a detector device storing passings locally while the upstream link is down.
 
 **Consumer-side resume (timing-node to downstream consumer).**
-A downstream consumer (live timing app, diagnostics app, external integrator, federated node) that disconnects from a runtime node and later reconnects must be able to read every event the node accepted during the outage, in order, with no gaps and no duplicates, provided the events are still within the configured retention window. The runtime node is responsible for buffering on the consumer's behalf; consumers do not buffer for each other. The durable event log lives behind [`port-out-event-log`](https://github.com/Open-Timekeeping/otk-core/tree/main/port-out-event-log) (in v0, [`adapter-event-log-segment`](https://github.com/Open-Timekeeping/adapter-event-log-segment)). When a consumer requests a range that has fallen out of retention, the node returns a structured `retention_expired` error rather than silent gaps. This is the analogue of a central timing server holding all received events for the scoring application to pick up when it reconnects.
+A downstream consumer (live timing app, diagnostics app, external integrator, federated node) that disconnects from a runtime node and later reconnects must be able to read every event the node accepted during the outage, in order, with no gaps and no duplicates, provided the events are still within the configured retention window. The runtime node is responsible for buffering on the consumer's behalf; consumers do not buffer for each other. The durable event log lives behind [`port-out-event-log`](../port-out-event-log) (in v0, [`adapter-event-log-segment`](../adapter-event-log-segment)). When a consumer requests a range that has fallen out of retention, the node returns a structured `retention_expired` error rather than silent gaps. This is the analogue of a central timing server holding all received events for the scoring application to pick up when it reconnects.
 
 **What this means for the adapter role.**
 Adapters are responsible for the producer-to-node link. They do not buffer on behalf of downstream consumers. A detector adapter that has delivered an event to the runtime node has done its job; the runtime node owns durability from that point forward.
 
 **What this means for retention.**
-Retention is the maximum outage a consumer can survive without help. A consumer that may go offline for hours during a session must have a retention window longer than that outage. Retention is configurable per node; the default policy and its trade-offs are settled in [`timing-node`](https://github.com/Open-Timekeeping/timing-node).
+Retention is the maximum outage a consumer can survive without help. A consumer that may go offline for hours during a session must have a retention window longer than that outage. Retention is configurable per node; the default policy and its trade-offs are settled in [`timing-node`](../timing-node).
 
 **Cross-node durability is intentionally out of scope for v0.**
-Replication and consensus across runtime nodes are deliberately not in the v0 design. The reasoning: timing data has no cross-event invariants that a consensus protocol exists to protect; per-detector sequence numbers make events idempotent at the source; and order matters only within a logical channel, not across the cluster. Within a single runtime node, durability is covered by the segment-log backend ([`adapter-event-log-segment`](https://github.com/Open-Timekeeping/adapter-event-log-segment)) and the producer/consumer resume contracts above. Cross-node redundancy is an operational concern at v0: RAID-1 on the timing host, frequent rsync to a peer machine, and the per-detector-stack topology in [topologies.md](topologies.md) (each stack survives on its own).
+Replication and consensus across runtime nodes are deliberately not in the v0 design. The reasoning: timing data has no cross-event invariants that a consensus protocol exists to protect; per-detector sequence numbers make events idempotent at the source; and order matters only within a logical channel, not across the cluster. Within a single runtime node, durability is covered by the segment-log backend ([`adapter-event-log-segment`](../adapter-event-log-segment)) and the producer/consumer resume contracts above. Cross-node redundancy is an operational concern at v0: RAID-1 on the timing host, frequent rsync to a peer machine, and the per-detector-stack topology in [topologies.md](topologies.md) (each stack survives on its own).
 
 If a future deployment genuinely requires cross-node durability (broadcast-grade SLAs, hot-standby with zero data loss, multi-venue federation), the intended path is **producer-side dual-write**: detector adapters publish OTK frames to two listeners at once, each node commits independently to its own segment log, and deduplication relies on the existing per-detector sequence numbers. This composes with the contracts already in place; it does not require a consensus protocol. Open Timekeeping does not reach for Raft / Paxos / KRaft to solve this problem.
 
@@ -364,7 +363,7 @@ Running `chronyd` or `ptp4l`, wiring PPS coax, choosing the GNSS receiver model,
 
 ## Embedded support is part of the same model
 
-Embedded support is **not** an alternative path that bypasses detector adapters. It is the lower-level use of the same `otk-core` crates from firmware: `event-model`, `otk-protocol`, and `frame-codec` are all `no_std` + `alloc`, so a native detector built around them satisfies the same `DetectorAdapter` contract (from `otk-core/otk-contracts`) as a process running on Linux, and emits OTK frames over a transport binding the device supports (USB CDC, TCP, UART, etc.). The HAL/target/embedded-HAL toolkit for building such firmware is planned (see "Planned / not yet shipped" above) but not part of the current shipped surface.
+Embedded support is **not** an alternative path that bypasses detector adapters. It is the lower-level use of the same the workspace crates from firmware: `event-model`, `otk-protocol`, and `frame-codec` are all `no_std` + `alloc`, so a native detector built around them satisfies the same `DetectorAdapter` contract (from `otk-contracts`) as a process running on Linux, and emits OTK frames over a transport binding the device supports (USB CDC, TCP, UART, etc.). The HAL/target/embedded-HAL toolkit for building such firmware is planned (see "Planned / not yet shipped" above) but not part of the current shipped surface.
 
 This means:
 

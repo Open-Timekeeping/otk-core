@@ -6,15 +6,15 @@ license     = "Apache-2.0"
 description = "Unix-socket ingest adapter for OTK. Implements port-in-ingest over a local AF_UNIX listener."
 
 [dependencies]
-port-in-ingest  = { path = "../port-in-ingest" }
-protocol        = { path = "../otk-protocol", package = "otk-protocol" }
-event-model     = { path = "../event-model" }
-frame-codec     = { path = "../frame-codec" }
-ingest-protocol = { path = "../ingest-protocol" }
+port-in-ingest  = { workspace = true }
+otk-protocol    = { workspace = true }
+event-model     = { workspace = true }
+frame-codec     = { workspace = true }
+ingest-protocol = { workspace = true }
 async-trait     = { workspace = true }
-tokio           = { version = "1", features = ["net", "io-util", "time", "fs"] }
+tokio           = { workspace = true, features = ["net", "io-util", "time", "fs"] }
 
 [dev-dependencies]
-tokio    = { version = "1", features = ["rt", "macros", "net", "io-util", "test-util", "fs"] }
-minicbor = { version = "0.24", features = ["alloc", "derive"] }
-tempfile = "3"
+tokio    = { workspace = true, features = ["rt", "macros", "net", "io-util", "test-util", "fs"] }
+minicbor = { workspace = true, features = ["alloc", "derive"] }
+tempfile = { workspace = true }

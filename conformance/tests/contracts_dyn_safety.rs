@@ -84,7 +84,11 @@ async fn detector_adapter_is_dyn_safe() {
 async fn detector_adapter_first_event_is_metadata() {
     let mut adapter = MinimalDetector::new();
     adapter.start().await.unwrap();
-    let first = adapter.next_event().await.expect("at least one event").expect("ok");
+    let first = adapter
+        .next_event()
+        .await
+        .expect("at least one event")
+        .expect("ok");
     assert!(
         matches!(first, AdapterEvent::Metadata(_)),
         "adapter contract requires Metadata as the first event after start"
@@ -166,7 +170,11 @@ async fn timebase_is_dyn_safe() {
 async fn timebase_first_event_is_metadata() {
     let mut tb = MinimalTimebase::new();
     tb.start().await.unwrap();
-    let first = tb.next_event().await.expect("at least one event").expect("ok");
+    let first = tb
+        .next_event()
+        .await
+        .expect("at least one event")
+        .expect("ok");
     assert!(
         matches!(first, TimebaseEvent::Metadata(_)),
         "timebase contract requires Metadata as the first event after start"

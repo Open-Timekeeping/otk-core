@@ -42,8 +42,8 @@ impl PendingGroup {
         let crossed_at_ns = self.detections[peak_idx].detected_at_ns;
         let peak_uncertainty = self.detections[peak_idx].detected_at_uncertainty_ns;
         let timebase_id = self.detections[peak_idx].timebase_id.clone();
-        let timestamping_method = self.detections[peak_idx].timestamping_method.clone();
-        let source_attestation = self.detections[peak_idx].source_attestation.clone();
+        let timestamping_method = self.detections[peak_idx].timestamping_method;
+        let source_attestation = self.detections[peak_idx].source_attestation;
 
         let crossed_at_uncertainty_ns = match (peak_uncertainty, span) {
             (Some(u), s) if s > 0 => Some(u.max(s)),
@@ -55,7 +55,11 @@ impl PendingGroup {
         let timing_point_id = self.detections[0].timing_point_id.clone();
         let subject_id = self.detections[0].subject_id.clone();
 
-        let detection_ids = self.detections.into_iter().map(|d| d.detection_id).collect();
+        let detection_ids = self
+            .detections
+            .into_iter()
+            .map(|d| d.detection_id)
+            .collect();
 
         Crossing {
             crossing_id: CrossingId::new_random(),
@@ -147,7 +151,10 @@ impl CrossingProcessor {
     pub fn push_detection(&mut self, det: Detection) -> Vec<Crossing> {
         // Anonymous detections never group; commit immediately.
         let Some(subject_id) = det.subject_id.clone() else {
-            return vec![PendingGroup { detections: vec![det] }.commit()];
+            return vec![PendingGroup {
+                detections: vec![det],
+            }
+            .commit()];
         };
 
         let key = (det.timing_point_id.clone(), subject_id);
@@ -223,8 +230,23 @@ mod tests {
         }
     }
 
-    fn loop_det(id: &str, tp: &str, subj: Option<&str>, at_ns: u64, rssi: Option<i16>) -> Detection {
-        det(id, tp, subj, at_ns, SensorData::LoopTransponder { rssi_dbm: rssi, pulse_count: None })
+    fn loop_det(
+        id: &str,
+        tp: &str,
+        subj: Option<&str>,
+        at_ns: u64,
+        rssi: Option<i16>,
+    ) -> Detection {
+        det(
+            id,
+            tp,
+            subj,
+            at_ns,
+            SensorData::LoopTransponder {
+                rssi_dbm: rssi,
+                pulse_count: None,
+            },
+        )
     }
 
     fn beam_det(id: &str, tp: &str, subj: Option<&str>, at_ns: u64) -> Detection {
@@ -289,7 +311,10 @@ mod tests {
         p.push_detection(loop_det("d2", "tp-b", Some("s1"), 1001, None));
         let crossings = p.flush();
         assert_eq!(crossings.len(), 2);
-        let points: Vec<&str> = crossings.iter().map(|c| c.timing_point_id.as_str()).collect();
+        let points: Vec<&str> = crossings
+            .iter()
+            .map(|c| c.timing_point_id.as_str())
+            .collect();
         assert!(points.contains(&"tp-a"));
         assert!(points.contains(&"tp-b"));
     }
@@ -347,6 +372,9 @@ mod tests {
         let crossings = p.flush();
         let uncertainty = crossings[0].crossed_at_uncertainty_ns.unwrap();
         // span = 500ms; uncertainty must be at least the span
-        assert!(uncertainty >= 500_000_000, "uncertainty {uncertainty} < span 500ms");
+        assert!(
+            uncertainty >= 500_000_000,
+            "uncertainty {uncertainty} < span 500ms"
+        );
     }
 }

@@ -1,0 +1,1 @@
+See [AGENTS.md](AGENTS.md). The canonical conceptual model lives in [`spec/`](spec/); start at [`spec/architecture.md`](spec/architecture.md). Per-crate orientation lives in each crate's own `README.md`.

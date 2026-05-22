@@ -22,15 +22,10 @@ Concretely:
 ## Where this sits in the architecture
 
 ```text
-server/
-  core/
-    event-model/              domain DTOs (OtkEvent, Detection, ...)
-  ports/
-    port-out-event-log/       outbound port contract   <-- this repo
-  adapters/
-    adapter-event-log-segment/  implements port-out-event-log (v0 backend)
-  app/
-    timing-node/              depends on this port; injects the adapter
+event-model/                  domain DTOs (OtkEvent, Detection, ...)
+port-out-event-log/           outbound port contract               <-- this crate
+adapter-event-log-segment/    implements port-out-event-log (v0 backend)
+timing-node/                  depends on this port; injects the adapter
 ```
 
 ## Design decisions

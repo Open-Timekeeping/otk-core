@@ -39,10 +39,11 @@ pub enum MessageType {
 /// ([`Connect`], [`ConnectAck`], [`Heartbeat`], etc.).
 ///
 /// Frame encoding (adding a length prefix and writing bytes to a transport) is the
-/// responsibility of `frame-codec` / `embedded-wire`, not this type.
+/// responsibility of `frame-codec`, not this type.
 ///
 /// [`Connect`]: crate::handshake::Connect
 /// [`ConnectAck`]: crate::handshake::ConnectAck
+/// [`Heartbeat`]: crate::heartbeat::Heartbeat
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct OtkEnvelope {
     #[n(0)]

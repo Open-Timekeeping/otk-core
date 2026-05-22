@@ -1,5 +1,5 @@
 use event_model::OtkEvent;
-use protocol::{ids::ProducerId, Heartbeat, MessageType, OtkEnvelope};
+use otk_protocol::{ids::ProducerId, Heartbeat, MessageType, OtkEnvelope};
 
 use crate::error::ProtocolError;
 
@@ -28,7 +28,10 @@ pub struct PostHandshakeProcessor {
 
 impl PostHandshakeProcessor {
     pub fn new(producer_id: ProducerId, negotiated_version: u8) -> Self {
-        Self { producer_id, negotiated_version }
+        Self {
+            producer_id,
+            negotiated_version,
+        }
     }
 
     pub fn producer_id(&self) -> &ProducerId {
@@ -96,7 +99,7 @@ mod tests {
         Detection, DetectionId, DetectorId, SensorData, SourceAttestation, TimebaseId,
         TimestampingMethod, TimingPointId,
     };
-    use protocol::{ids::ProducerId, MessageType, OtkEnvelope, PROTOCOL_VERSION};
+    use otk_protocol::{ids::ProducerId, MessageType, OtkEnvelope, PROTOCOL_VERSION};
 
     fn p() -> PostHandshakeProcessor {
         PostHandshakeProcessor::new(ProducerId::from("p-1"), PROTOCOL_VERSION)
@@ -133,7 +136,10 @@ mod tests {
 
     #[test]
     fn event_returned_as_action() {
-        let env = envelope(MessageType::Event, Some(minicbor::to_vec(&test_event()).unwrap()));
+        let env = envelope(
+            MessageType::Event,
+            Some(minicbor::to_vec(test_event()).unwrap()),
+        );
         match p().process(env).unwrap() {
             InboundAction::Event(_) => {}
             _ => panic!("expected Event"),
@@ -142,9 +148,12 @@ mod tests {
 
     #[test]
     fn heartbeat_with_valid_payload_yields_heartbeat_action() {
-        let hb = protocol::Heartbeat { sent_at_ns: 1 };
-        let env = envelope(MessageType::Heartbeat, Some(minicbor::to_vec(&hb).unwrap()));
-        assert!(matches!(p().process(env).unwrap(), InboundAction::Heartbeat));
+        let hb = otk_protocol::Heartbeat { sent_at_ns: 1 };
+        let env = envelope(MessageType::Heartbeat, Some(minicbor::to_vec(hb).unwrap()));
+        assert!(matches!(
+            p().process(env).unwrap(),
+            InboundAction::Heartbeat
+        ));
     }
 
     #[test]
@@ -159,7 +168,10 @@ mod tests {
     #[test]
     fn disconnect_yields_disconnect_action() {
         let env = envelope(MessageType::Disconnect, None);
-        assert!(matches!(p().process(env).unwrap(), InboundAction::Disconnect));
+        assert!(matches!(
+            p().process(env).unwrap(),
+            InboundAction::Disconnect
+        ));
     }
 
     #[test]

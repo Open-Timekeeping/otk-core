@@ -87,7 +87,11 @@ impl DetectionBuilder {
 
     pub fn build(self) -> Detection {
         let detection_id = self.detection_id.unwrap_or_else(|| {
-            DetectionId::new(format!("{}-{}", self.detector_id.as_str(), self.sequence_number))
+            DetectionId::new(format!(
+                "{}-{}",
+                self.detector_id.as_str(),
+                self.sequence_number
+            ))
         });
         Detection {
             detection_id,
@@ -192,7 +196,9 @@ impl HealthEventBuilder {
     pub fn degraded(detector_id: &DetectorId, reason: impl Into<String>) -> Self {
         Self {
             detector_id: detector_id.clone(),
-            status: DetectorHealthStatus::Degraded { reason: reason.into() },
+            status: DetectorHealthStatus::Degraded {
+                reason: reason.into(),
+            },
             message: None,
         }
     }
@@ -200,7 +206,9 @@ impl HealthEventBuilder {
     pub fn failed(detector_id: &DetectorId, reason: impl Into<String>) -> Self {
         Self {
             detector_id: detector_id.clone(),
-            status: DetectorHealthStatus::Failed { reason: reason.into() },
+            status: DetectorHealthStatus::Failed {
+                reason: reason.into(),
+            },
             message: None,
         }
     }

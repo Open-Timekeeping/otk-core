@@ -4,7 +4,7 @@ use thiserror::Error;
 ///
 /// Version-range mismatch is **not** an error here: it is reported as
 /// [`HandshakeOutcome::Rejected`] with
-/// [`protocol::ConnectRejectReason::VersionNotSupported`] so the adapter
+/// [`otk_protocol::ConnectRejectReason::VersionNotSupported`] so the adapter
 /// still sends a `ConnectReject` envelope back to the producer before
 /// closing. Only structural / protocol-level problems surface as
 /// `HandshakeError`.
@@ -13,7 +13,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum HandshakeError {
     #[error("expected Connect envelope, got {0:?}")]
-    UnexpectedMessageType(protocol::MessageType),
+    UnexpectedMessageType(otk_protocol::MessageType),
 
     #[error("Connect envelope had no payload")]
     MissingConnectPayload,
@@ -50,5 +50,5 @@ pub enum ProtocolError {
     DecodeFailed(String),
 
     #[error("unexpected message type for ingest session: {0:?}")]
-    UnexpectedMessageType(protocol::MessageType),
+    UnexpectedMessageType(otk_protocol::MessageType),
 }

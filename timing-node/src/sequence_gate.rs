@@ -105,12 +105,20 @@ impl SequenceGate {
         let map = self.high_water.lock().unwrap_or_else(|e| e.into_inner());
         match map.get(&key).copied() {
             None => GateDecision::Accept,
-            Some(hw) if seq <= hw => GateDecision::Duplicate { high_water: hw, got: seq },
+            Some(hw) if seq <= hw => GateDecision::Duplicate {
+                high_water: hw,
+                got: seq,
+            },
             Some(hw) => {
                 if seq == hw + 1 {
-                    GateDecision::Advance { previous_high_water: hw }
+                    GateDecision::Advance {
+                        previous_high_water: hw,
+                    }
                 } else {
-                    GateDecision::Gap { expected: hw + 1, got: seq }
+                    GateDecision::Gap {
+                        expected: hw + 1,
+                        got: seq,
+                    }
                 }
             }
         }
@@ -151,7 +159,10 @@ impl SequenceGate {
     /// Reset the gate's state for tests.
     #[cfg(test)]
     pub fn reset(&self) {
-        self.high_water.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.high_water
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 }
 
@@ -190,7 +201,12 @@ mod tests {
         let gate = SequenceGate::new();
         gate.check("p", &det("loop-1", 5));
         let d = gate.check("p", &det("loop-1", 6));
-        assert!(matches!(d, GateDecision::Advance { previous_high_water: 5 }));
+        assert!(matches!(
+            d,
+            GateDecision::Advance {
+                previous_high_water: 5
+            }
+        ));
     }
 
     #[test]
@@ -198,7 +214,13 @@ mod tests {
         let gate = SequenceGate::new();
         gate.check("p", &det("loop-1", 5));
         let d = gate.check("p", &det("loop-1", 5));
-        assert!(matches!(d, GateDecision::Duplicate { high_water: 5, got: 5 }));
+        assert!(matches!(
+            d,
+            GateDecision::Duplicate {
+                high_water: 5,
+                got: 5
+            }
+        ));
         assert!(!d.persist());
     }
 
@@ -215,7 +237,13 @@ mod tests {
         let gate = SequenceGate::new();
         gate.check("p", &det("loop-1", 5));
         let d = gate.check("p", &det("loop-1", 9));
-        assert!(matches!(d, GateDecision::Gap { expected: 6, got: 9 }));
+        assert!(matches!(
+            d,
+            GateDecision::Gap {
+                expected: 6,
+                got: 9
+            }
+        ));
         assert!(d.persist());
     }
 
@@ -226,7 +254,12 @@ mod tests {
         gate.check("p", &det("loop-2", 1));
         // loop-2's gate is fresh; this is its second detection, expecting Advance.
         let d = gate.check("p", &det("loop-2", 2));
-        assert!(matches!(d, GateDecision::Advance { previous_high_water: 1 }));
+        assert!(matches!(
+            d,
+            GateDecision::Advance {
+                previous_high_water: 1
+            }
+        ));
     }
 
     #[test]
