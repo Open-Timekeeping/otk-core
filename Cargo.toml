@@ -14,6 +14,7 @@ members  = [
     "otk-sdk",
     "producer-simulated",
     "timing-node",
+    "conformance",
 ]
 resolver = "2"
 
