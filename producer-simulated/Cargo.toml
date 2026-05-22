@@ -1,0 +1,20 @@
+[package]
+name        = "producer-simulated"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Simulated OTK producer: generates configurable synthetic detections and publishes them to a timing node. Binary: otk-simulator."
+
+[[bin]]
+name = "otk-simulator"
+path = "src/main.rs"
+
+[dependencies]
+otk-sdk    = { path = "../otk-sdk", default-features = false, features = ["producer"] }
+async-trait = "0.1"
+tokio       = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "sync"] }
+serde       = { version = "1", features = ["derive"] }
+toml        = "0.8"
+tracing     = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror   = "2"
