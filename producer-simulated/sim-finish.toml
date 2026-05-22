@@ -1,0 +1,6 @@
+node_addr             = "127.0.0.1:8463"
+detector_id           = "sim-finish"
+producer_id           = "sim-finish"
+timing_point_ids      = ["tp-finish"]
+subject_ids           = ["car-1", "car-2", "car-3"]
+detection_interval_ms = 2000
