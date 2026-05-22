@@ -1,0 +1,19 @@
+[package]
+name        = "adapter-ingest-tcp"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "TCP ingest adapter for OTK. Implements port-in-ingest: accepts producer connections, decodes OTK frames, and delivers typed events to the timing node."
+
+[dependencies]
+port-in-ingest  = { path = "../port-in-ingest" }
+protocol        = { path = "../otk-protocol", package = "otk-protocol" }
+event-model     = { path = "../event-model" }
+frame-codec     = { path = "../frame-codec" }
+ingest-protocol = { path = "../ingest-protocol" }
+async-trait     = { workspace = true }
+tokio           = { version = "1", features = ["net", "io-util", "rt-multi-thread", "macros", "time"] }
+
+[dev-dependencies]
+tokio    = { version = "1", features = ["rt", "macros", "net", "io-util", "test-util"] }
+minicbor = { version = "0.24", features = ["alloc", "derive"] }
