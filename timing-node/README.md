@@ -97,6 +97,8 @@ startup time with a clear error):
 | `id` | `"unix-main"` | Stable id used in metrics and logs. Must be unique across all listeners. |
 | `socket_path` | — | Filesystem path for the AF_UNIX socket. Required. Created on bind; cleaned up at process exit. |
 | `max_frame_bytes` | `65535` | Maximum incoming frame size in bytes. |
+| `socket_permissions` | unset (process umask) | Octal mode bits applied to the socket file after bind, e.g. `0o660` for owner+group read/write. TOML accepts octal integer literals natively. Leave unset only when the umask is already tight enough; the default umask is typically too permissive for an ingest endpoint. |
+| `force_rebind` | `false` | If `true`, forcibly removes any existing AF_UNIX socket at `socket_path`, even if another process appears to own it. The default is the safe behaviour: probe with `connect()`, refuse to bind if a live listener responds (`AddrInUse`), remove only stale entries from crashed prior runs. Set to `true` only for intentional takeover scenarios (e.g. blue/green deploys where the prior process is being killed in lockstep). |
 
 Mixed configs (e.g. TCP for remote producers + Unix socket for same-host
 detectors) are first-class. All listeners feed the same canonical
@@ -151,11 +153,6 @@ unauthenticated so external probes and Prometheus scrapers can reach them.
 - Non-TCP/Unix transport bindings (USB CDC, serial, raw Ethernet).
 - Plugin loading (`plugin-api` not yet specified).
 - Detector and timebase registry.
-- Surface `socket_permissions` and `force_rebind` through
-  `ListenerConfig::UnixSocket` TOML so operators can configure them
-  per-listener (currently hardcoded to safe defaults at construction).
-- Bind-time field validation on `TcpIngestConfig` (already present on
-  `UnixSocketIngestConfig`; matching change pending for symmetry).
 - Config hot-reload.
 
 ## Ingest is listener-driven

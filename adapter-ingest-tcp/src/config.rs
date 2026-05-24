@@ -7,6 +7,12 @@ use std::time::Duration;
 /// with the stream-framing length prefix.
 pub const DEFAULT_MAX_FRAME_BYTES: u32 = 65_535;
 
+/// Configuration for [`crate::TcpIngestPort`].
+///
+/// Validated at `bind` time: `max_frame_bytes == 0` and
+/// `handshake_timeout == Duration::ZERO` are rejected with
+/// `IngestError::Io(InvalidInput)` so misconfigurations surface at startup,
+/// not as confusing handshake failures later.
 #[derive(Debug, Clone)]
 pub struct TcpIngestConfig {
     /// Address to bind the ingest listener on.

@@ -26,6 +26,32 @@ pub enum ListenerConfig {
         socket_path: PathBuf,
         #[serde(default = "default_max_frame_bytes")]
         max_frame_bytes: u32,
+
+        /// Octal permission bits to apply to the socket file after bind
+        /// (e.g. `0o660` for owner+group read/write). `None` (the
+        /// default) leaves the mode to the process umask, which is
+        /// typically too permissive for an ingest endpoint. Set this
+        /// for production deployments. See
+        /// `adapter_ingest_unix_socket::UnixSocketIngestConfig::socket_permissions`
+        /// for the race-window discussion. (Not linked: that crate is
+        /// cfg(unix)-gated and absent from the dep graph on Windows.)
+        ///
+        /// TOML form: `socket_permissions = 0o660` (TOML accepts octal
+        /// integer literals natively).
+        #[serde(default)]
+        socket_permissions: Option<u32>,
+
+        /// If `true`, forcibly remove an existing AF_UNIX socket at
+        /// [`socket_path`](Self::UnixSocket::socket_path) even if
+        /// another process appears to own it. `false` (the default) is
+        /// the safe behaviour: probe the existing socket with
+        /// `UnixStream::connect`, refuse bind if a live listener
+        /// responds (returns `AddrInUse`), remove it only if it's a
+        /// stale entry from a crashed previous run. Set to `true` only
+        /// for intentional takeover scenarios (e.g. blue/green deploys
+        /// where the old process is being killed in lockstep).
+        #[serde(default)]
+        force_rebind: bool,
     },
 }
 
@@ -203,10 +229,47 @@ socket_path = "/var/run/otk-node.sock"
         assert_eq!(loaded.listeners.len(), 2);
         match &loaded.listeners[1] {
             ListenerConfig::UnixSocket {
-                id, socket_path, ..
+                id,
+                socket_path,
+                socket_permissions,
+                force_rebind,
+                ..
             } => {
                 assert_eq!(id, "local-adapters");
                 assert_eq!(socket_path, &PathBuf::from("/var/run/otk-node.sock"));
+                // Defaults when fields are omitted.
+                assert_eq!(*socket_permissions, None);
+                assert!(!*force_rebind);
+            }
+            _ => panic!("expected UnixSocket variant"),
+        }
+    }
+
+    #[test]
+    fn unix_listener_with_permissions_and_force_rebind_parses() {
+        // TOML accepts `0o660` as an octal integer literal natively.
+        let toml_str = r#"
+node_id   = "n"
+api_addr  = "0.0.0.0:9090"
+storage_dir = "data"
+
+[[listeners]]
+transport          = "unix-socket"
+id                 = "local-adapters"
+socket_path        = "/var/run/otk-node.sock"
+socket_permissions = 0o660
+force_rebind       = true
+"#;
+        let loaded: NodeConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(loaded.listeners.len(), 1);
+        match &loaded.listeners[0] {
+            ListenerConfig::UnixSocket {
+                socket_permissions,
+                force_rebind,
+                ..
+            } => {
+                assert_eq!(*socket_permissions, Some(0o660));
+                assert!(*force_rebind);
             }
             _ => panic!("expected UnixSocket variant"),
         }
