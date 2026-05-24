@@ -126,6 +126,73 @@ async fn subscribe_delivers_backfill_and_live() {
 }
 
 #[tokio::test]
+async fn distinct_producer_ids_are_preserved_per_batch() {
+    // The contract: `producer_id` belongs to each entry (not each
+    // segment, not each session, not the log as a whole). A backend
+    // that stored producer_id only once per segment, or coalesced
+    // consecutive appends with the same producer_id, would still pass
+    // the basic round-trip in `read_range_returns_entries_in_order`.
+    // This interleaved scenario forces the field to travel per-entry.
+    //
+    // Required for the runtime's sequence-gate restart resume: on
+    // startup, `seed_from_log` walks every retained Detection and
+    // keys the gate by `(producer_id, detector_id)`. A backend that
+    // dropped producer_id distinctions would silently break that
+    // resume path.
+    let mut log = MemLog::new();
+    log.append("alpha", &[det(0)]).await.unwrap();
+    log.append("beta", &[det(1), det(2)]).await.unwrap();
+    log.append("alpha", &[det(3)]).await.unwrap();
+
+    let entries = log.read_range(Offset::new(0), None).await.unwrap();
+    assert_eq!(entries.len(), 4);
+    assert_eq!(entries[0].producer_id, "alpha", "offset 0 was alpha's");
+    assert_eq!(
+        entries[1].producer_id, "beta",
+        "offset 1 was beta's first event"
+    );
+    assert_eq!(
+        entries[2].producer_id, "beta",
+        "offset 2 was beta's second event in the same batch"
+    );
+    assert_eq!(
+        entries[3].producer_id, "alpha",
+        "offset 3 was alpha's second batch"
+    );
+}
+
+#[tokio::test]
+async fn subscribe_carries_producer_id_in_backfill_and_live() {
+    // Same producer_id-per-entry contract as the read_range path, but
+    // exercised through subscribe so a backend can't satisfy one path
+    // and quietly miss the other. Backfill (entry already on disk
+    // before subscribe) and live (entry appended after subscribe) are
+    // separate code paths in `MemLog` and `SegmentLog`, so both are
+    // verified.
+    let mut log = MemLog::new();
+    log.append("alpha", &[det(0)]).await.unwrap();
+
+    let mut sub = log.subscribe(Offset::new(0)).await.unwrap();
+
+    let backfilled = sub.next_entry().await.expect("backfill entry").expect("ok");
+    assert_eq!(backfilled.offset, Offset::new(0));
+    assert_eq!(
+        backfilled.producer_id, "alpha",
+        "backfill must carry producer_id"
+    );
+
+    log.append("beta", &[det(1)]).await.unwrap();
+    let live = sub.next_entry().await.expect("live entry").expect("ok");
+    assert_eq!(live.offset, Offset::new(1));
+    assert_eq!(
+        live.producer_id, "beta",
+        "live delivery must carry producer_id"
+    );
+
+    sub.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn event_log_is_dyn_safe() {
     // Compile-time evidence that any backend can be boxed behind the trait.
     let mut log: Box<dyn EventLog> = Box::new(MemLog::new());
