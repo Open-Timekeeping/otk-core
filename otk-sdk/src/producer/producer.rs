@@ -243,11 +243,40 @@ fn make_envelope(
         sequence_number: None,
         correlation_id: None,
         payload,
-        // Phase A: field plumbed through but never populated yet. The
-        // producer-side auto-extraction from the current tracing span
-        // lands in Phase C.
-        traceparent: None,
+        traceparent: current_traceparent(),
     }
+}
+
+/// Extract a W3C `traceparent` header value from the current
+/// `tracing::Span` via the OTel bridge.
+///
+/// Returns `None` when no OpenTelemetry subscriber layer is installed
+/// (the default empty context has an invalid span context), or when
+/// the current span's trace/span ids would render to the all-zero
+/// values the W3C spec forbids. In either case the envelope ships
+/// with no traceparent and the runtime treats it as an unparented
+/// event, matching v0 behaviour.
+///
+/// Called for every outgoing envelope (Event, Heartbeat, handshake,
+/// Disconnect). The OTel bridge's `OpenTelemetrySpanExt::context()`
+/// is fast (a hashmap lookup on the span's extensions), so the
+/// per-envelope cost is small even with no subscriber configured.
+fn current_traceparent() -> Option<String> {
+    use opentelemetry::trace::TraceContextExt;
+    use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+    let span = tracing::Span::current();
+    let cx = span.context();
+    let span_ref = cx.span();
+    let span_ctx = span_ref.span_context();
+    if !span_ctx.is_valid() {
+        return None;
+    }
+
+    let trace_id = u128::from_be_bytes(span_ctx.trace_id().to_bytes());
+    let span_id = u64::from_be_bytes(span_ctx.span_id().to_bytes());
+    let flags = span_ctx.trace_flags().to_u8();
+    otk_protocol::format_traceparent(trace_id, span_id, flags)
 }
 
 fn encode_envelope(envelope: &OtkEnvelope) -> Result<Vec<u8>, ProducerError> {
@@ -299,5 +328,35 @@ fn eof_to_closed(e: std::io::Error) -> ProducerError {
         ProducerError::Closed
     } else {
         ProducerError::Io(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Without any tracing-opentelemetry layer installed, the current
+    /// span's OTel context is empty. Extraction must return `None` so
+    /// the envelope ships with no traceparent and the runtime treats
+    /// the event as unparented (matching v0 behaviour).
+    #[test]
+    fn current_traceparent_is_none_without_otel_subscriber() {
+        assert_eq!(current_traceparent(), None);
+    }
+
+    /// `make_envelope` populates `traceparent` from `current_traceparent`;
+    /// when no OTel subscriber is installed, that pipes `None` through.
+    /// Verifies the wiring without claiming the positive path here
+    /// (that needs an OTel-aware subscriber; see the round-trip test
+    /// covered at the runtime layer).
+    #[test]
+    fn make_envelope_propagates_none_traceparent_when_no_subscriber() {
+        let env = make_envelope(
+            &ProducerId::from("p-test"),
+            MessageType::Heartbeat,
+            Some(vec![1, 2, 3]),
+        );
+        assert_eq!(env.traceparent, None);
+        assert_eq!(env.source_id.as_str(), "p-test");
     }
 }

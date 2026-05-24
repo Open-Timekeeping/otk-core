@@ -142,12 +142,19 @@ unauthenticated so external probes and Prometheus scrapers can reach them.
   text format, unauthenticated).
 - Configurable CORS allow-list for the API.
 - Graceful shutdown on `Ctrl-C`; join errors surfaced via `tracing`.
+- W3C `traceparent` propagation through `OtkEnvelope`: producers using
+  `otk-sdk` auto-extract from the current `tracing::Span` via the
+  `tracing-opentelemetry` bridge; the node parents each per-event
+  `tracing::Span` on the producer's remote span context, so logs
+  stitch across the wire under one trace id in any OpenTelemetry-aware
+  backend. With no OTel SDK configured at runtime, the field is
+  silently absent and the per-event span becomes a local root, so the
+  default ops experience is unchanged.
 
 **Deferred:**
 - TLS on the ingest listener (rustls plumbing planned; current advice
   for wire-encryption deployments is to run OTK over an SSH tunnel or
   WireGuard).
-- W3C `traceparent` propagation through `OtkEnvelope`.
 - Sequence-gate restart persistence (high-water marks rebuilt from the
   segment log on startup).
 - Non-TCP/Unix transport bindings (USB CDC, serial, raw Ethernet).
