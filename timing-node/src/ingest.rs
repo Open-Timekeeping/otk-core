@@ -144,8 +144,12 @@ async fn handle_session(mut session: Box<dyn IngestSession>, pipeline: Arc<NodeP
 
     loop {
         match session.next_event().await {
-            Ok(Some(event)) => {
-                if let Err(e) = pipeline.append_event(&producer_id, event).await {
+            Ok(Some(incoming)) => {
+                // Phase B: traceparent is plumbed through but not yet
+                // used to parent a tracing span. Phase C wires
+                // tracing-opentelemetry and applies it.
+                let _traceparent = incoming.traceparent;
+                if let Err(e) = pipeline.append_event(&producer_id, incoming.event).await {
                     error!(peer = %peer_addr, error = %e, "storage error");
                     break;
                 }

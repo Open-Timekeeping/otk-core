@@ -103,8 +103,57 @@ fn processor_dispatches_event_payload_to_action() {
         "p-1",
     );
     match proc.process(env).expect("process") {
-        InboundAction::Event(OtkEvent::Detection(_)) => {}
+        InboundAction::Event {
+            event: OtkEvent::Detection(_),
+            traceparent,
+        } => {
+            assert_eq!(traceparent, None, "envelope had no traceparent");
+        }
         other => panic!("expected Event/Detection, got {other:?}"),
+    }
+}
+
+#[test]
+fn processor_forwards_valid_traceparent() {
+    let proc = PostHandshakeProcessor::new(ProducerId::from("p-1"), PROTOCOL_VERSION);
+    let mut env = data_envelope(
+        MessageType::Event,
+        Some(minicbor::to_vec(test_event()).unwrap()),
+        "p-1",
+    );
+    env.traceparent = Some("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_string());
+    match proc.process(env).expect("process") {
+        InboundAction::Event { traceparent, .. } => {
+            assert_eq!(
+                traceparent.as_deref(),
+                Some("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"),
+                "valid W3C traceparent must pass through to the runtime"
+            );
+        }
+        other => panic!("expected Event, got {other:?}"),
+    }
+}
+
+#[test]
+fn processor_drops_malformed_traceparent_without_failing() {
+    let proc = PostHandshakeProcessor::new(ProducerId::from("p-1"), PROTOCOL_VERSION);
+    let mut env = data_envelope(
+        MessageType::Event,
+        Some(minicbor::to_vec(test_event()).unwrap()),
+        "p-1",
+    );
+    // Wrong length, wrong format. The processor MUST drop this silently
+    // (not reject the event) so a buggy producer's instrumentation can't
+    // break the data path.
+    env.traceparent = Some("not-a-traceparent".to_string());
+    match proc.process(env).expect("process") {
+        InboundAction::Event { traceparent, .. } => {
+            assert_eq!(
+                traceparent, None,
+                "malformed traceparent must be silently dropped"
+            );
+        }
+        other => panic!("expected Event, got {other:?}"),
     }
 }
 
