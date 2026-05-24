@@ -111,10 +111,19 @@ impl Default for MemLog {
 
 #[async_trait]
 impl EventLog for MemLog {
-    async fn append(&mut self, events: &[OtkEvent]) -> Result<Offset, StorageError> {
+    async fn append(
+        &mut self,
+        producer_id: &str,
+        events: &[OtkEvent],
+    ) -> Result<Offset, StorageError> {
         if events.is_empty() {
             return Err(StorageError::InvalidInput(
                 "events slice must not be empty".into(),
+            ));
+        }
+        if producer_id.is_empty() {
+            return Err(StorageError::InvalidInput(
+                "producer_id must not be empty".into(),
             ));
         }
         let mut inner = self.inner.lock().await;
@@ -124,6 +133,7 @@ impl EventLog for MemLog {
                 offset: Offset::new(start + i as u64),
                 event: ev.clone(),
                 appended_at_ns: now_ns(),
+                producer_id: producer_id.to_string(),
             });
         }
         let last = Offset::new(start + events.len() as u64 - 1);

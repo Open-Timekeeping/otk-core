@@ -7,12 +7,32 @@ use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 pub const MAGIC: [u8; 4] = [0x4F, 0x54, 0x4B, 0x53]; // "OTKS"
-pub const VERSION: u8 = 1;
+/// Segment file format version.
+///
+/// **v1** (original): `payload_len(4) | offset(8) | appended_at_ns(8) |
+/// event_len(4) | event_cbor(N) | crc(4)`.
+///
+/// **v2** (this version): adds `producer_id_len(2) | producer_id_utf8(M)`
+/// between `appended_at_ns` and `event_len`. The producer id is the
+/// runtime's source-of-truth for the SequenceGate's restart resume.
+///
+/// Bumped from 1 to 2 because the on-disk record layout changed in a
+/// non-backward-compatible way. A v1 segment file will fail header
+/// validation with `unknown segment version 1`, which is correct: the
+/// reader cannot parse v1 records as v2.
+pub const VERSION: u8 = 2;
 pub const HEADER_LEN: u64 = 24;
 
 // Maximum CBOR payload size per event: 4 MiB. Prevents corrupt length fields
 // from causing arbitrarily large allocations.
 const MAX_EVENT_CBOR: usize = 4 * 1024 * 1024;
+
+// Maximum producer id length in bytes. u16 caps at 65_535, but a producer
+// id is a short stable string (typically "<role>-<n>", e.g. "loop-1") so
+// 256 bytes is comfortably above any realistic value. Enforced on write
+// and validated on read so a corrupt length field cannot trigger an
+// arbitrarily large allocation.
+const MAX_PRODUCER_ID_BYTES: usize = 256;
 
 /// Error message written into [`StorageError::Corrupted`] when `read_record`
 /// encounters the zero sentinel at the end of a closed segment.
@@ -71,6 +91,17 @@ impl SegmentHeader {
 /// Returns the byte offset where the `payload_len` field was written (suitable
 /// for storing in the offset index). On any write failure the partial record is
 /// truncated so the file is left at the same length as before the call.
+///
+/// On-disk record format (v2):
+/// ```text
+/// payload_len(4) | offset(8) | appended_at_ns(8) |
+///   producer_id_len(2) | producer_id_utf8(M) |
+///   event_len(4) | event_cbor(N) |
+/// crc(4)
+/// ```
+/// The CRC is computed over offset, appended_at_ns, producer_id_len,
+/// producer_id bytes, event_len, and event_cbor (everything inside
+/// `payload_len` and before `crc`).
 pub async fn write_record(file: &mut File, entry: &LogEntry) -> Result<u64, StorageError> {
     let event_cbor = minicbor::to_vec(&entry.event)
         .map_err(|e| StorageError::Corrupted(format!("CBOR encode: {e}")))?;
@@ -82,14 +113,31 @@ pub async fn write_record(file: &mut File, entry: &LogEntry) -> Result<u64, Stor
         )));
     }
 
-    // payload = offset(8) + appended_at_ns(8) + event_len(4) + event_cbor(N)
+    let producer_id_bytes = entry.producer_id.as_bytes();
+    if producer_id_bytes.is_empty() {
+        return Err(StorageError::InvalidInput(
+            "producer_id must not be empty".into(),
+        ));
+    }
+    if producer_id_bytes.len() > MAX_PRODUCER_ID_BYTES {
+        return Err(StorageError::InvalidInput(format!(
+            "producer_id ({} bytes) exceeds maximum length ({MAX_PRODUCER_ID_BYTES} bytes)",
+            producer_id_bytes.len()
+        )));
+    }
+    let producer_id_len = producer_id_bytes.len() as u16;
+
+    // payload = offset(8) + appended_at_ns(8) + producer_id_len(2) +
+    //           producer_id(M) + event_len(4) + event_cbor(N)
     let event_cbor_len = event_cbor.len() as u32;
-    let payload_len: u32 = 8 + 8 + 4 + event_cbor_len;
+    let payload_len: u32 = 8 + 8 + 2 + producer_id_len as u32 + 4 + event_cbor_len;
 
     let crc = {
         let mut h = crc32fast::Hasher::new();
         h.update(&entry.offset.as_u64().to_le_bytes());
         h.update(&entry.appended_at_ns.to_le_bytes());
+        h.update(&producer_id_len.to_le_bytes());
+        h.update(producer_id_bytes);
         h.update(&event_cbor_len.to_le_bytes());
         h.update(&event_cbor);
         h.finalize()
@@ -103,6 +151,8 @@ pub async fn write_record(file: &mut File, entry: &LogEntry) -> Result<u64, Stor
     buf.extend_from_slice(&payload_len.to_le_bytes());
     buf.extend_from_slice(&entry.offset.as_u64().to_le_bytes());
     buf.extend_from_slice(&entry.appended_at_ns.to_le_bytes());
+    buf.extend_from_slice(&producer_id_len.to_le_bytes());
+    buf.extend_from_slice(producer_id_bytes);
     buf.extend_from_slice(&event_cbor_len.to_le_bytes());
     buf.extend_from_slice(&event_cbor);
     buf.extend_from_slice(&crc.to_le_bytes());
@@ -117,7 +167,8 @@ pub async fn write_record(file: &mut File, entry: &LogEntry) -> Result<u64, Stor
 
 /// Read and verify one record whose `payload_len` field starts at `pos`.
 ///
-/// Returns [`StorageError::Corrupted`] on CRC mismatch or CBOR decode failure.
+/// Returns [`StorageError::Corrupted`] on CRC mismatch, CBOR decode failure,
+/// non-UTF-8 producer_id, or any length field outside its sane bounds.
 /// Returns an [`std::io::Error`] with `UnexpectedEof` kind when `pos` is at or
 /// past EOF (the active segment has not been written yet).
 pub async fn read_record(file: &mut File, pos: u64) -> Result<LogEntry, StorageError> {
@@ -131,17 +182,12 @@ pub async fn read_record(file: &mut File, pos: u64) -> Result<LogEntry, StorageE
         return Err(StorageError::Corrupted(SENTINEL_MSG.into()));
     }
 
-    // Validate length fields before allocating: payload must be at least
-    // offset(8) + appended_at_ns(8) + event_len(4) = 20 bytes.
-    let event_cbor_len_expected = payload_len.checked_sub(20).ok_or_else(|| {
-        StorageError::Corrupted(format!(
-            "payload_len {payload_len} too small at pos {pos} (minimum 20)"
-        ))
-    })?;
-
-    if event_cbor_len_expected as usize > MAX_EVENT_CBOR {
+    // Validate the fixed-size header: offset(8) + appended_at_ns(8) +
+    // producer_id_len(2) + event_len(4) = 22 bytes minimum, even with
+    // an empty producer id and empty event payload.
+    if (payload_len as usize) < 22 {
         return Err(StorageError::Corrupted(format!(
-            "event CBOR length {event_cbor_len_expected} at pos {pos} exceeds maximum {MAX_EVENT_CBOR}"
+            "payload_len {payload_len} too small at pos {pos} (minimum 22)"
         )));
     }
 
@@ -152,6 +198,34 @@ pub async fn read_record(file: &mut File, pos: u64) -> Result<LogEntry, StorageE
     let mut appended_buf = [0u8; 8];
     file.read_exact(&mut appended_buf).await?;
     let appended_at_ns = u64::from_le_bytes(appended_buf);
+
+    let mut producer_id_len_buf = [0u8; 2];
+    file.read_exact(&mut producer_id_len_buf).await?;
+    let producer_id_len = u16::from_le_bytes(producer_id_len_buf);
+    if producer_id_len == 0 {
+        return Err(StorageError::Corrupted(format!(
+            "producer_id_len is 0 at pos {pos}; v2 segments require a non-empty producer id"
+        )));
+    }
+    if producer_id_len as usize > MAX_PRODUCER_ID_BYTES {
+        return Err(StorageError::Corrupted(format!(
+            "producer_id_len {producer_id_len} at pos {pos} exceeds maximum {MAX_PRODUCER_ID_BYTES}"
+        )));
+    }
+
+    let mut producer_id_bytes = vec![0u8; producer_id_len as usize];
+    file.read_exact(&mut producer_id_bytes).await?;
+    let producer_id = String::from_utf8(producer_id_bytes).map_err(|e| {
+        StorageError::Corrupted(format!("producer_id at pos {pos} is not valid UTF-8: {e}"))
+    })?;
+    // Re-derive the expected event_cbor length from payload_len now that
+    // the variable-length producer id is consumed.
+    let event_cbor_len_expected = payload_len - 8 - 8 - 2 - producer_id_len as u32 - 4;
+    if event_cbor_len_expected as usize > MAX_EVENT_CBOR {
+        return Err(StorageError::Corrupted(format!(
+            "event CBOR length {event_cbor_len_expected} at pos {pos} exceeds maximum {MAX_EVENT_CBOR}"
+        )));
+    }
 
     let mut event_len_buf = [0u8; 4];
     file.read_exact(&mut event_len_buf).await?;
@@ -175,6 +249,8 @@ pub async fn read_record(file: &mut File, pos: u64) -> Result<LogEntry, StorageE
         let mut h = crc32fast::Hasher::new();
         h.update(&raw_offset.to_le_bytes());
         h.update(&appended_at_ns.to_le_bytes());
+        h.update(&producer_id_len.to_le_bytes());
+        h.update(producer_id.as_bytes());
         h.update(&event_cbor_len_stored.to_le_bytes());
         h.update(&event_cbor);
         h.finalize()
@@ -191,6 +267,7 @@ pub async fn read_record(file: &mut File, pos: u64) -> Result<LogEntry, StorageE
     Ok(LogEntry {
         offset: Offset::new(raw_offset),
         appended_at_ns,
+        producer_id,
         event,
     })
 }
@@ -387,6 +464,7 @@ mod tests {
         LogEntry {
             offset: Offset::new(offset),
             appended_at_ns: 1_700_000_000_000_000_000 + offset,
+            producer_id: "test-producer".to_string(),
             event: make_event(),
         }
     }

@@ -155,7 +155,7 @@ impl NodePipeline {
         batch.push(event);
         batch.extend(crossings);
 
-        let offset = match self.log.lock().await.append(&batch).await {
+        let offset = match self.log.lock().await.append(producer_id, &batch).await {
             Ok(offset) => offset,
             Err(e) => {
                 if let Some(OtkEvent::Detection(det)) = batch.first() {

@@ -561,7 +561,11 @@ impl EventLog for SegmentLog {
     /// returned after the commit point (e.g. a roll failure), callers must check
     /// `latest_offset()` before deciding whether to retry -- submitting the same
     /// batch again would duplicate events.
-    async fn append(&mut self, events: &[OtkEvent]) -> Result<Offset, StorageError> {
+    async fn append(
+        &mut self,
+        producer_id: &str,
+        events: &[OtkEvent],
+    ) -> Result<Offset, StorageError> {
         if self.poisoned {
             return Err(StorageError::Corrupted(
                 "log is poisoned: position query failed after a durable write; \
@@ -572,6 +576,11 @@ impl EventLog for SegmentLog {
         if events.is_empty() {
             return Err(StorageError::InvalidInput(
                 "events slice must not be empty".into(),
+            ));
+        }
+        if producer_id.is_empty() {
+            return Err(StorageError::InvalidInput(
+                "producer_id must not be empty".into(),
             ));
         }
 
@@ -603,6 +612,7 @@ impl EventLog for SegmentLog {
             let entry = LogEntry {
                 offset: Offset::new(local_next_offset),
                 appended_at_ns: ts,
+                producer_id: producer_id.to_string(),
                 event: event.clone(),
             };
 
@@ -951,12 +961,66 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut log = open_log(dir.path()).await;
 
-        let last = log.append(&[make_event()]).await.unwrap();
+        let last = log.append("test-producer", &[make_event()]).await.unwrap();
         assert_eq!(last, Offset::new(0));
 
         let entries = log.read_range(Offset::new(0), None).await.unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].offset, Offset::new(0));
+        assert_eq!(entries[0].producer_id, "test-producer");
+    }
+
+    #[tokio::test]
+    async fn producer_id_round_trips_per_batch() {
+        // Each append call tags every event in its batch with the same
+        // producer_id; consecutive appends with different ids must be
+        // distinguishable on read-back so the runtime can rebuild
+        // per-producer state from the log.
+        let dir = tempdir().unwrap();
+        let mut log = open_log(dir.path()).await;
+
+        log.append("loop-1", &[make_event(), make_event()])
+            .await
+            .unwrap();
+        log.append("loop-2", &[make_event()]).await.unwrap();
+        log.append("loop-1", &[make_event()]).await.unwrap();
+
+        let entries = log.read_range(Offset::new(0), None).await.unwrap();
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[0].producer_id, "loop-1");
+        assert_eq!(entries[1].producer_id, "loop-1");
+        assert_eq!(entries[2].producer_id, "loop-2");
+        assert_eq!(entries[3].producer_id, "loop-1");
+    }
+
+    #[tokio::test]
+    async fn append_rejects_empty_producer_id() {
+        let dir = tempdir().unwrap();
+        let mut log = open_log(dir.path()).await;
+        let err = log.append("", &[make_event()]).await.unwrap_err();
+        assert!(
+            matches!(err, StorageError::InvalidInput(ref m) if m.contains("producer_id")),
+            "expected InvalidInput about producer_id, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn producer_id_survives_reopen() {
+        // The whole point of persisting producer_id: it must be there
+        // after the process restarts, which is what the runtime's
+        // sequence-gate restart-resume hooks into.
+        let dir = tempdir().unwrap();
+        {
+            let mut log = open_log(dir.path()).await;
+            log.append("p-a", &[make_event()]).await.unwrap();
+            log.append("p-b", &[make_event()]).await.unwrap();
+        }
+        // Drop and reopen.
+        let mut log = open_log(dir.path()).await;
+        let entries = log.read_range(Offset::new(0), None).await.unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].producer_id, "p-a");
+        assert_eq!(entries[1].producer_id, "p-b");
     }
 
     #[tokio::test]
@@ -964,7 +1028,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut log = open_log(dir.path()).await;
 
-        log.append(&[make_event(), make_event(), make_event()])
+        log.append("test-producer", &[make_event(), make_event(), make_event()])
             .await
             .unwrap();
 
@@ -997,7 +1061,9 @@ mod tests {
     async fn latest_and_earliest_after_append() {
         let dir = tempdir().unwrap();
         let mut log = open_log(dir.path()).await;
-        log.append(&[make_event(), make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event(), make_event()])
+            .await
+            .unwrap();
         assert_eq!(log.latest_offset().await.unwrap(), Some(Offset::new(1)));
         assert_eq!(log.earliest_offset().await.unwrap(), Some(Offset::new(0)));
     }
@@ -1006,7 +1072,7 @@ mod tests {
     async fn read_range_from_beyond_tail() {
         let dir = tempdir().unwrap();
         let mut log = open_log(dir.path()).await;
-        log.append(&[make_event(), make_event(), make_event()])
+        log.append("test-producer", &[make_event(), make_event(), make_event()])
             .await
             .unwrap();
         let entries = log.read_range(Offset::new(5), None).await.unwrap();
@@ -1025,7 +1091,11 @@ mod tests {
         let log2 = Arc::clone(&log);
         let handle = tokio::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-            log2.lock().await.append(&[make_event()]).await.unwrap();
+            log2.lock()
+                .await
+                .append("test-producer", &[make_event()])
+                .await
+                .unwrap();
         });
 
         let entry = sub.next_entry().await.unwrap().unwrap();
@@ -1044,7 +1114,7 @@ mod tests {
 
         log.lock()
             .await
-            .append(&[make_event(), make_event(), make_event()])
+            .append("test-producer", &[make_event(), make_event(), make_event()])
             .await
             .unwrap();
 
@@ -1061,7 +1131,11 @@ mod tests {
         let log2 = Arc::clone(&log);
         let handle = tokio::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-            log2.lock().await.append(&[make_event()]).await.unwrap();
+            log2.lock()
+                .await
+                .append("test-producer", &[make_event()])
+                .await
+                .unwrap();
         });
 
         let entry = sub.next_entry().await.unwrap().unwrap();
@@ -1085,8 +1159,8 @@ mod tests {
 
         // Two appends: each rolls immediately and the closed segment is
         // evicted, so offset 0 is no longer available.
-        log.append(&[make_event()]).await.unwrap();
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
 
         let result = log.subscribe(Offset::new(0)).await;
         assert!(
@@ -1106,8 +1180,8 @@ mod tests {
         .await
         .unwrap();
 
-        log.append(&[make_event()]).await.unwrap();
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
 
         assert!(
             !log.closed.is_empty(),
@@ -1127,9 +1201,9 @@ mod tests {
         .await
         .unwrap();
 
-        log.append(&[make_event()]).await.unwrap();
-        log.append(&[make_event()]).await.unwrap();
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
 
         // With max_bytes=0 every closed segment is deleted immediately after
         // each roll, so nothing survives in the closed list.
@@ -1146,7 +1220,9 @@ mod tests {
 
         {
             let mut log = open_log(dir.path()).await;
-            log.append(&[make_event(), make_event()]).await.unwrap();
+            log.append("test-producer", &[make_event(), make_event()])
+                .await
+                .unwrap();
         }
 
         let mut log2 = open_log(dir.path()).await;
@@ -1162,7 +1238,9 @@ mod tests {
 
         {
             let mut log = open_log(dir.path()).await;
-            log.append(&[make_event(), make_event()]).await.unwrap();
+            log.append("test-producer", &[make_event(), make_event()])
+                .await
+                .unwrap();
         }
 
         // Locate the .seg file.
@@ -1207,7 +1285,7 @@ mod tests {
     async fn append_empty_slice_returns_invalid_input() {
         let dir = tempdir().unwrap();
         let mut log = open_log(dir.path()).await;
-        let result = log.append(&[]).await;
+        let result = log.append("test-producer", &[]).await;
         assert!(matches!(result, Err(StorageError::InvalidInput(_))));
     }
 
@@ -1223,12 +1301,12 @@ mod tests {
         .await
         .unwrap();
 
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
         // Give the first segment's timestamp time to fall strictly before the
         // cutoff computed inside enforce_retention. 50 ms is enough headroom
         // on Windows where the system clock has ~15 ms resolution.
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
 
         // With max_age_secs=0, segments whose last_appended_at_ns is strictly
         // before the cutoff are evicted. The first segment (appended 50+ ms
@@ -1261,9 +1339,9 @@ mod tests {
         .await
         .unwrap();
 
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
 
         // The first segment (appended 50+ ms ago) is guaranteed evicted by
         // the age branch. Do not assert closed.is_empty() for the same reason
@@ -1292,8 +1370,8 @@ mod tests {
         .await
         .unwrap();
 
-        log.append(&[make_event()]).await.unwrap();
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
 
         // Both segments were evicted by the size branch of the Hybrid policy.
         // With max_bytes=1 every closed segment exceeds the limit immediately.
@@ -1313,9 +1391,9 @@ mod tests {
         .await
         .unwrap();
 
-        log.append(&[make_event()]).await.unwrap();
-        log.append(&[make_event()]).await.unwrap();
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
 
         let entries = log.read_range(Offset::new(0), None).await.unwrap();
         assert_eq!(entries.len(), 3, "all three events should be readable");
@@ -1337,8 +1415,8 @@ mod tests {
             .await
             .unwrap();
             // Each append forces a roll, so both events end up in closed segments.
-            log.append(&[make_event()]).await.unwrap();
-            log.append(&[make_event()]).await.unwrap();
+            log.append("test-producer", &[make_event()]).await.unwrap();
+            log.append("test-producer", &[make_event()]).await.unwrap();
             assert!(
                 !log.closed.is_empty(),
                 "should have at least one closed segment"
@@ -1372,8 +1450,8 @@ mod tests {
             .await
             .unwrap();
 
-            log.append(&[make_event()]).await.unwrap();
-            log.append(&[make_event()]).await.unwrap();
+            log.append("test-producer", &[make_event()]).await.unwrap();
+            log.append("test-producer", &[make_event()]).await.unwrap();
 
             assert!(log.closed.is_empty(), "all segments should be evicted");
             assert_eq!(log.next_offset, 2);
@@ -1412,13 +1490,13 @@ mod tests {
         .await
         .unwrap();
 
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
         assert!(
             !log.closed.is_empty(),
             "segment should roll after first append with age=0"
         );
 
-        log.append(&[make_event()]).await.unwrap();
+        log.append("test-producer", &[make_event()]).await.unwrap();
         assert_eq!(
             log.closed.len(),
             2,
@@ -1453,7 +1531,10 @@ mod tests {
             // and deliver only offset 3.
             log2.lock()
                 .await
-                .append(&[make_event(), make_event(), make_event(), make_event()])
+                .append(
+                    "test-producer",
+                    &[make_event(), make_event(), make_event(), make_event()],
+                )
                 .await
                 .unwrap();
         });
@@ -1488,8 +1569,8 @@ mod tests {
         // Append two events, each in its own rolled segment.
         {
             let mut l = log.lock().await;
-            l.append(&[make_event()]).await.unwrap();
-            l.append(&[make_event()]).await.unwrap();
+            l.append("test-producer", &[make_event()]).await.unwrap();
+            l.append("test-producer", &[make_event()]).await.unwrap();
         }
 
         let mut sub = log.lock().await.subscribe(Offset::new(0)).await.unwrap();
