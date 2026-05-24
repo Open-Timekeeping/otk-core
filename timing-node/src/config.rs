@@ -31,13 +31,24 @@ pub enum ListenerConfig {
         /// (e.g. `0o660` for owner+group read/write). `None` (the
         /// default) leaves the mode to the process umask, which is
         /// typically too permissive for an ingest endpoint. Set this
-        /// for production deployments. See
-        /// `adapter_ingest_unix_socket::UnixSocketIngestConfig::socket_permissions`
-        /// for the race-window discussion. (Not linked: that crate is
-        /// cfg(unix)-gated and absent from the dep graph on Windows.)
+        /// for production deployments.
         ///
         /// TOML form: `socket_permissions = 0o660` (TOML accepts octal
         /// integer literals natively).
+        ///
+        // The link below resolves only on `cfg(unix)` builds; on Windows
+        // the `adapter-ingest-unix-socket` crate is not in the dep graph
+        // and intra-doc resolution would fail. Render it as a plain code
+        // span on Windows so `cargo doc` stays warning-free on both targets.
+        #[cfg_attr(
+            unix,
+            doc = "See [`adapter_ingest_unix_socket::UnixSocketIngestConfig::socket_permissions`]"
+        )]
+        #[cfg_attr(
+            not(unix),
+            doc = "See `adapter_ingest_unix_socket::UnixSocketIngestConfig::socket_permissions`"
+        )]
+        /// for the race-window discussion.
         #[serde(default)]
         socket_permissions: Option<u32>,
 
@@ -268,7 +279,11 @@ force_rebind       = true
                 force_rebind,
                 ..
             } => {
+                // Assert via both spellings so a reader skimming the test
+                // sees the round-trip is genuinely octal-aware, not just
+                // textually similar. (0o660 == 432 decimal == rw-rw----.)
                 assert_eq!(*socket_permissions, Some(0o660));
+                assert_eq!(*socket_permissions, Some(432));
                 assert!(*force_rebind);
             }
             _ => panic!("expected UnixSocket variant"),

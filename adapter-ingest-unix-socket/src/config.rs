@@ -15,11 +15,20 @@ pub struct UnixSocketIngestConfig {
     /// abort the bind to avoid clobbering the wrong file.
     pub socket_path: PathBuf,
 
-    /// Maximum CBOR payload length per frame. Must be `>= 1`.
+    /// Maximum CBOR payload length per frame. **Enforced lower bound:
+    /// `>= 1` (`0` is rejected at `bind` time).** Practical minimum is
+    /// considerably higher: a Connect handshake serialised with a token
+    /// and capabilities is typically several hundred bytes, and frames
+    /// declaring more bytes than this cap are rejected mid-stream.
+    /// Operators picking a value below ~1024 should expect every real
+    /// handshake to fail.
     pub max_frame_bytes: u32,
 
     /// Maximum time allowed for the OTK handshake to complete after a
-    /// connection is accepted. Must be `> 0`.
+    /// connection is accepted. **Enforced lower bound: `> 0`
+    /// (`Duration::ZERO` is rejected at `bind` time).** Practical
+    /// minimum is round-trip latency plus handshake decode time;
+    /// sub-millisecond values will time out instantly on real networks.
     pub handshake_timeout: Duration,
 
     /// Optional explicit permission bits to apply to the socket file after
