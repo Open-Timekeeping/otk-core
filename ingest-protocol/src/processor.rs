@@ -1,14 +1,36 @@
 use event_model::OtkEvent;
-use otk_protocol::{ids::ProducerId, Heartbeat, MessageType, OtkEnvelope};
+use otk_protocol::{ids::ProducerId, is_valid_traceparent, Heartbeat, MessageType, OtkEnvelope};
 
 use crate::error::ProtocolError;
 
 /// What the protocol machine wants the transport adapter to do with an
 /// inbound envelope.
+//
+// `Event` carries a full `OtkEvent` (~200 bytes including the largest
+// `Detection` variant) plus an `Option<String>` for the traceparent.
+// `Heartbeat` and `Disconnect` carry no data. Clippy's
+// `large_enum_variant` lint flags the size disparity and suggests
+// boxing the `OtkEvent`. We opt against that: every event traverses
+// this enum on the hot path, and forcing a heap allocation per event
+// to satisfy a layout-tidiness lint trades real per-event cost for a
+// cosmetic improvement. The size disparity is consequence-free here
+// because the enum is always constructed and consumed in the same
+// stack frame (processor → adapter session → ingest), never stored in
+// large collections where padding would matter.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum InboundAction {
     /// Deliver this canonical event to the runtime.
-    Event(OtkEvent),
+    ///
+    /// `traceparent` carries the W3C Trace Context string from the
+    /// envelope when the producer set one and it passed format
+    /// validation. Malformed values are dropped (not surfaced as a
+    /// protocol error) so a buggy producer instrumentation can't break
+    /// the data path.
+    Event {
+        event: OtkEvent,
+        traceparent: Option<String>,
+    },
     /// A heartbeat: keep reading, do not surface to the runtime.
     Heartbeat,
     /// The producer asked to disconnect cleanly.
@@ -61,7 +83,14 @@ impl PostHandshakeProcessor {
                 let payload = envelope.payload.ok_or(ProtocolError::MissingEventPayload)?;
                 let event: OtkEvent = minicbor::decode(&payload)
                     .map_err(|e| ProtocolError::DecodeFailed(format!("OtkEvent: {e}")))?;
-                Ok(InboundAction::Event(event))
+                // Validate traceparent format before passing it
+                // upstream. Per the field's contract, a malformed value
+                // must be dropped (not rejected) so a buggy producer
+                // can't take down the ingest path.
+                let traceparent = envelope
+                    .traceparent
+                    .filter(|s| is_valid_traceparent(s.as_str()));
+                Ok(InboundAction::Event { event, traceparent })
             }
             MessageType::Heartbeat => {
                 // Per the OtkEnvelope contract, every message type except Disconnect
@@ -142,8 +171,50 @@ mod tests {
             Some(minicbor::to_vec(test_event()).unwrap()),
         );
         match p().process(env).unwrap() {
-            InboundAction::Event(_) => {}
+            InboundAction::Event {
+                event: _,
+                traceparent,
+            } => {
+                assert_eq!(traceparent, None, "no traceparent set on the envelope");
+            }
             _ => panic!("expected Event"),
+        }
+    }
+
+    #[test]
+    fn valid_traceparent_is_forwarded() {
+        let mut env = envelope(
+            MessageType::Event,
+            Some(minicbor::to_vec(test_event()).unwrap()),
+        );
+        env.traceparent =
+            Some("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_string());
+        match p().process(env).unwrap() {
+            InboundAction::Event { traceparent, .. } => {
+                assert_eq!(
+                    traceparent.as_deref(),
+                    Some("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+                );
+            }
+            _ => panic!("expected Event"),
+        }
+    }
+
+    #[test]
+    fn malformed_traceparent_is_dropped_not_rejected() {
+        let mut env = envelope(
+            MessageType::Event,
+            Some(minicbor::to_vec(test_event()).unwrap()),
+        );
+        env.traceparent = Some("not-a-real-traceparent".to_string());
+        match p().process(env).unwrap() {
+            InboundAction::Event { traceparent, .. } => {
+                assert_eq!(
+                    traceparent, None,
+                    "malformed traceparent must be silently dropped, not propagated"
+                );
+            }
+            _ => panic!("expected Event (malformed traceparent should NOT fail processing)"),
         }
     }
 

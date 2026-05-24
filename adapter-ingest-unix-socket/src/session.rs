@@ -2,14 +2,13 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use event_model::OtkEvent;
 use frame_codec::{encode_stream, FrameError, StreamFrameDecoder};
 use ingest_protocol::{
     perform_server_handshake_with_auth, ConnectAuthoriser, HandshakeError, HandshakeOutcome,
     InboundAction, PostHandshakeProcessor, ProtocolError,
 };
 use otk_protocol::OtkEnvelope;
-use port_in_ingest::{IngestError, IngestSession};
+use port_in_ingest::{IncomingEvent, IngestError, IngestSession};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
@@ -97,7 +96,7 @@ impl UnixSocketIngestSession {
 
 #[async_trait]
 impl IngestSession for UnixSocketIngestSession {
-    async fn next_event(&mut self) -> Result<Option<OtkEvent>, IngestError> {
+    async fn next_event(&mut self) -> Result<Option<IncomingEvent>, IngestError> {
         loop {
             if self.pending.is_empty() && !self.fill_pending().await? {
                 return Ok(None);
@@ -108,7 +107,9 @@ impl IngestSession for UnixSocketIngestSession {
                 .process(envelope)
                 .map_err(protocol_err_to_ingest)?
             {
-                InboundAction::Event(event) => return Ok(Some(event)),
+                InboundAction::Event { event, traceparent } => {
+                    return Ok(Some(IncomingEvent { event, traceparent }))
+                }
                 InboundAction::Heartbeat => continue,
                 InboundAction::Disconnect => return Ok(None),
             }

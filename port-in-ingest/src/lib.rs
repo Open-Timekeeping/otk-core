@@ -17,4 +17,4 @@ pub mod session;
 
 pub use error::IngestError;
 pub use port::EventIngestPort;
-pub use session::IngestSession;
+pub use session::{IncomingEvent, IngestSession};
