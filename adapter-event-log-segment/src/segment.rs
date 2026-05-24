@@ -523,6 +523,15 @@ mod tests {
 
         // Write zero sentinel (as if a roll was interrupted before the .idx was written)
         file.write_all(&0u32.to_le_bytes()).await.unwrap();
+        // Flush so `recover_active`'s `file.metadata().await?.len()` sees the
+        // sentinel. `tokio::fs::File::write_all` only fills the internal write
+        // buffer; without an explicit flush the on-disk length can still be
+        // `after_record` when the metadata is read, the loop's
+        // `if pos >= file_len { break; }` check exits before the sentinel is
+        // scanned, no truncation happens, and the buffer flushes after the
+        // assertion fires. Reproducible on Linux CI; Windows happened to mask
+        // it. See PR #7 CI for the failing run.
+        file.flush().await.unwrap();
 
         let (positions, next_file_pos, record_count) = recover_active(&mut file, 0).await.unwrap();
 
