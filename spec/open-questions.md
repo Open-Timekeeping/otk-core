@@ -54,7 +54,7 @@ Resolved:
 
 Resolved:
 - Trait shape: async `next_event` returning a small `AdapterEvent` / `TimebaseEvent` enum. The first event after `start` must be `Metadata`. (Conformance asserts the invariant.)
-- Producer-side reconnect resume: monotonic per-`(producer_id, detector_id)` sequence numbers; runtime side is authoritative via `SequenceGate`. Restart persistence (gate seeded from segment-log replay) is a follow-up.
+- Producer-side reconnect resume: monotonic per-`(producer_id, detector_id)` sequence numbers; runtime side is authoritative via `SequenceGate`. Restart resume now also survives **runtime** restarts: `producer_id` is persisted alongside each `LogEntry` (segment format v2), and `Node::new` seeds the gate's high-water marks from a full log scan before any listener accepts. A producer that reconnects with the same `producer_id` after a node restart cannot replay an acknowledged sequence. (Implementation: `timing_node::sequence_gate::seed_from_log`.)
 - Timebase contract: lives alongside `DetectorAdapter` in `otk-contracts`. (`timebase-api` as a separate repo was deleted; timebases are producers using `otk-sdk`.)
 
 ## Timebase profiles
@@ -79,15 +79,16 @@ The timebase model is settled in [architecture.md § Timebases are physical refe
 - **Default retention policy and trade-offs.** Retention is the bound on consumer outage tolerance. What's the shipped default, and how is it expressed in config (time / size / hybrid)? `RetentionPolicy::Indefinite` is the current default.
 - **Bootstrap response payload.** Confirmed in [architecture.md § Multi-node deployments are partitioning, not clustering](architecture.md) that nodes answer a bootstrap query with a directory of the deployment. The exact response schema (per-node fields, capability declarations, freshness/TTL semantics, whether bootstrap can return partial views) is still to be designed.
 - **Configuration format and hot-reload policy.** TOML format is shipped; hot-reload is not.
-- **Sequence-gate restart persistence.** The gate's high-water marks are in-memory; on restart, a producer that reconnects with a regressed sequence number could re-enter events that were previously deduplicated. Seeding the gate from a segment-log replay on startup is a follow-up.
 - **TLS for the TCP transport.** Deferred; deployments needing wire encryption today should run OTK over an SSH tunnel or WireGuard. Native rustls support is planned.
-- **W3C `traceparent` propagation through `OtkEnvelope`.** Deferred; today each side carries its own `tracing` span without cross-wire context.
 
 Resolved:
 - Multi-listener config: `[[listeners]]` array of `ListenerConfig::Tcp { … }` / `UnixSocket { … }`. All listeners feed the same canonical ingest pipeline.
 - Auth: shared-secret tokens in `Connect.auth_token`; server-side `ConnectAuthoriser` trait with `AllowAll` default + token allow-list config. Bearer-token middleware on the REST/SSE API.
 - Operational endpoints: `/healthz`, `/readyz`, `/metrics` (Prometheus text). Hand-rolled labelled counters and gauges.
 - Stream naming convention: `StreamKind` in `event-model` carries the semantic level (`Raw`, `Detections`, `Processed`); concrete `StreamId` is a configurable per-deployment value.
+- **Sequence-gate restart persistence.** High-water marks are rebuilt from the segment log on `Node::new` (cross-ref the detector-adapter Resolved entry above; segment format v2 carries `producer_id` per entry, which is the gate's keyspace).
+- **W3C `traceparent` propagation through `OtkEnvelope`.** Optional `traceparent: Option<String>` field at CBOR index 7 on the envelope; producers using `otk-sdk` auto-extract from the current `tracing::Span` via `tracing-opentelemetry`; the runtime parents each per-event `tracing::Span` on the producer's remote span context. With no OTel SDK configured at runtime, the field is absent and the per-event span becomes a local root, so the default ops experience is unchanged.
+- **Pipeline atomicity: storage append vs `CrossingProcessor` state.** The processor splits into `peek_detection` (pure, returns the crossings a commit would emit) and `commit_detection` (mutates and returns the same). `NodePipeline::append_event` peeks before append and commits only on success, so a storage failure can no longer leave the processor's grouping window advanced past what was persisted.
 
 ## Storage, `port-out-event-log` and `adapter-event-log-segment`
 
@@ -100,7 +101,7 @@ The v0 backend is a custom segment-file log ([`adapter-event-log-segment`](../ad
 - **Actor-vs-mutex for the runtime's storage path.** The current `NodePipeline` uses `tokio::sync::Mutex<Box<dyn EventLog>>` with a documented lock discipline (the synchronous `CrossingProcessor` mutex is never held across an `.await`). A single-owner actor task could outperform the mutex under high-rate ingest; deferred until benchmarks justify it.
 
 Resolved:
-- Segment file format: 24-byte header (magic `OTKS`, version, flags, base_offset, created_at_ns); length-prefixed records with CRC32; closed segments end with a 4-byte zero sentinel. Companion `.idx` offset index written atomically on segment close.
+- Segment file format (v2): 24-byte header (magic `OTKS`, version byte, flags, base_offset, created_at_ns); length-prefixed records carrying `offset`, `appended_at_ns`, `producer_id_len + producer_id_utf8` (≤ 256 B), `event_len + event_cbor`, with a CRC32 over everything before the CRC field; closed segments end with a 4-byte zero sentinel. Companion `.idx` offset index written atomically on segment close. The v1 → v2 bump added the `producer_id` slot per record so the runtime's sequence gate can be rebuilt from the log on restart; v1 segment files are explicitly rejected at header validation.
 - `fsync` policy: per-append `sync_all()` by default; configurable via `flush_interval_ms`.
 - Retention enforcement: `RetentionPolicy::{Indefinite, TimeBased, SizeBased, Hybrid}`; eviction runs after every segment roll; `read_range` / `subscribe` against an evicted offset returns `StorageError::RetentionExpired { requested, earliest_available }`.
 - Crash recovery: scan active segment, verify CRC32 per record, truncate at first corrupt or incomplete record.

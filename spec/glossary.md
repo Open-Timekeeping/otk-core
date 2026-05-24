@@ -52,7 +52,7 @@ The transport-independent wire protocol used by Open Timekeeping components to e
 The canonical Open Timekeeping event types and identifiers: detection, hit, crossing, detector health, timebase status, adapter metadata, runtime control, and the identifier types tying them together. Has no transport assumptions. `no_std` + `alloc`.
 
 **Wire Protocol** ([`otk-protocol`](../otk-protocol), crate `otk-protocol`)
-The OTK message envelope: versioning, message types, source identity, sequence numbers, acknowledgements (where applicable), error messages, and compatibility rules. Transport-agnostic.
+The OTK message envelope: versioning, message types, source identity, sequence numbers, acknowledgements (where applicable), error messages, compatibility rules, and the optional W3C `traceparent` field for cross-wire distributed-trace propagation. Transport-agnostic.
 
 **Frame Codec** ([`frame-codec`](../frame-codec))
 How OTK messages are encoded into byte frames and decoded back. Provides length-prefixed stream framing for reliable transports (TCP, Unix socket) and COBS + CRC-16/CCITT-FALSE serial framing for unreliable byte streams (UART, RS-232, RS-485). `no_std` + `alloc`; shared between server and firmware.
