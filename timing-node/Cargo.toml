@@ -29,6 +29,12 @@ toml                      = { workspace = true }
 tower-http                = { workspace = true, features = ["cors"] }
 tracing                   = { workspace = true }
 tracing-subscriber        = { workspace = true, features = ["env-filter"] }
+# OpenTelemetry bridge: parents the per-event tracing::Span on the
+# producer's remote span context when an incoming envelope carries a
+# valid W3C traceparent. With no OTel SDK configured at runtime, the
+# parent set call is harmless (the default empty context).
+tracing-opentelemetry     = { workspace = true }
+opentelemetry             = { workspace = true }
 
 # The Unix-socket ingest adapter is cfg(unix) internally; gating the
 # dep itself keeps it out of non-Unix builds where it would compile to

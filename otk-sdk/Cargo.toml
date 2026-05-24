@@ -6,17 +6,32 @@ license     = "Apache-2.0"
 description = "Open Timekeeping SDK: consumer and producer features for timing applications."
 
 [dependencies]
-event-model   = { workspace = true }
-otk-contracts = { workspace = true, optional = true }
-otk-protocol  = { workspace = true, optional = true }
-thiserror     = { workspace = true }
-minicbor      = { workspace = true, features = ["alloc"], optional = true }
-tokio         = { workspace = true, features = ["net", "io-util"], optional = true }
+event-model            = { workspace = true }
+otk-contracts          = { workspace = true, optional = true }
+otk-protocol           = { workspace = true, optional = true }
+thiserror              = { workspace = true }
+minicbor               = { workspace = true, features = ["alloc"], optional = true }
+tokio                  = { workspace = true, features = ["net", "io-util"], optional = true }
+tracing                = { workspace = true, optional = true }
+tracing-opentelemetry  = { workspace = true, optional = true }
+opentelemetry          = { workspace = true, optional = true }
 
 [features]
 default  = ["client"]
 client   = []
-producer = ["dep:otk-contracts", "dep:otk-protocol", "dep:minicbor", "dep:tokio"]
+# Producer feature pulls in the OTel bridge so an outgoing envelope's
+# traceparent is auto-extracted from the current tracing::Span.
+# Without an OTel SDK configured at runtime, extraction returns None
+# and the envelope ships with no traceparent (existing v0 behaviour).
+producer = [
+    "dep:otk-contracts",
+    "dep:otk-protocol",
+    "dep:minicbor",
+    "dep:tokio",
+    "dep:tracing",
+    "dep:tracing-opentelemetry",
+    "dep:opentelemetry",
+]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "test-util"] }

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use port_in_ingest::{EventIngestPort, IngestError, IngestSession};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, Instrument};
 
 use crate::metrics::Metrics;
 use crate::pipeline::NodePipeline;
+use crate::trace_context::apply_traceparent;
 
 /// RAII guard that decrements `ingest_sessions_active` for a listener when
 /// dropped, regardless of how the session task ended (clean return, error,
@@ -145,12 +146,39 @@ async fn handle_session(mut session: Box<dyn IngestSession>, pipeline: Arc<NodeP
     loop {
         match session.next_event().await {
             Ok(Some(incoming)) => {
-                // Phase B: traceparent is plumbed through but not yet
-                // used to parent a tracing span. Phase C wires
-                // tracing-opentelemetry and applies it.
-                let _traceparent = incoming.traceparent;
-                if let Err(e) = pipeline.append_event(&producer_id, incoming.event).await {
-                    error!(peer = %peer_addr, error = %e, "storage error");
+                // Create a per-event span. When the producer supplied a
+                // valid W3C traceparent, parent this span on the
+                // producer's remote span context via the OTel bridge so
+                // logs stitch across the wire in any OpenTelemetry-
+                // aware backend. When no traceparent arrived (or no
+                // OTel SDK is configured at runtime), the parent stays
+                // empty and the span becomes a local root.
+                //
+                // `traceparent` is recorded as a span field even when
+                // the OTel parent set is a no-op, so plain `tracing`
+                // log consumers can still see the correlation id.
+                let event_span = tracing::info_span!(
+                    "ingest_event",
+                    producer = %producer_id,
+                    peer = %peer_addr,
+                    traceparent = incoming.traceparent.as_deref().unwrap_or("none"),
+                );
+                if let Some(tp) = incoming.traceparent.as_deref() {
+                    apply_traceparent(&event_span, tp);
+                }
+                let producer_id_for_async = producer_id.clone();
+                let peer_addr_for_async = peer_addr.clone();
+                let pipeline_for_async = Arc::clone(&pipeline);
+                let result = async move {
+                    pipeline_for_async
+                        .append_event(&producer_id_for_async, incoming.event)
+                        .await
+                        .map_err(|e| (peer_addr_for_async, e))
+                }
+                .instrument(event_span)
+                .await;
+                if let Err((peer, e)) = result {
+                    error!(peer = %peer, error = %e, "storage error");
                     break;
                 }
             }

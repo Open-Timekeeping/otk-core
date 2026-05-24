@@ -49,6 +49,16 @@ toml               = "0.8"
 tower-http         = "0.6"
 tracing            = "0.1"
 tracing-subscriber = "0.3"
+# OpenTelemetry bridge for `tracing`. Used to (a) extract a W3C
+# `traceparent` from the producer's current `tracing::Span` before
+# sending an envelope and (b) parent the runtime's per-event Span on
+# the producer's remote span context when a traceparent arrives. Both
+# crates work without an OTel SDK configured (extraction returns None,
+# set_parent is a no-op against the default empty context) so consumers
+# without OTel infrastructure pay only the dep-tree cost, not a
+# behaviour change. `metrics` feature off; we use the trace API only.
+tracing-opentelemetry = { version = "0.33", default-features = false }
+opentelemetry      = { version = "0.32", default-features = false, features = ["trace"] }
 uuid               = "1"
 
 # Intra-workspace path deps. Members that need any of these declare

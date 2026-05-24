@@ -11,6 +11,7 @@ mod metrics;
 mod pipeline;
 mod ports;
 mod sequence_gate;
+mod trace_context;
 
 pub use config::{load_from_file, ApiConfig, AuthConfig, ListenerConfig, NodeConfig};
 pub use metrics::Metrics;
