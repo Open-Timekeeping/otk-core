@@ -130,25 +130,23 @@ impl NodePipeline {
 
         let event_kind = event_kind_label(&event);
 
-        // ── Phase 2: compute crossings + try append ───────────────────
+        // ── Phase 2: compute crossings (peek) + try append ────────────
         //
-        // Note on processor state: `CrossingProcessor::push_detection`
-        // mutates the processor's grouping window. The current
-        // `timing-core` API doesn't offer a peek/commit split for the
-        // processor (unlike the gate above), so an append failure here
-        // leaves the processor's internal state advanced past what's in
-        // storage. If the producer then retries the same detection, the
-        // processor will not regroup it (already-consumed) and may emit
-        // a different crossing shape than the first attempt would have.
-        //
-        // We log this loudly on append failure and surface the error so
-        // the caller (ingest.rs) drops the session. A timing-core-side
-        // split is tracked as a follow-up in `spec/open-questions.md`.
+        // `CrossingProcessor::peek_detection` returns the crossings that
+        // a subsequent `commit_detection` would emit, without mutating
+        // the processor's grouping window. The actual `commit_detection`
+        // call is deferred to Phase 3 alongside the gate commit so a
+        // storage append failure can't leave the processor advanced past
+        // what was persisted. Without this split, a producer retry after
+        // an append failure would observe a different crossing shape
+        // than the first attempt would have (the original group would
+        // have been consumed and any new detections with the same key
+        // would start a fresh group).
         let crossings: Vec<OtkEvent> = if let OtkEvent::Detection(ref det) = event {
             self.processor
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .push_detection(det.clone())
+                .peek_detection(det)
                 .into_iter()
                 .map(|c| OtkEvent::Crossing(map_crossing(&c)))
                 .collect()
@@ -160,35 +158,35 @@ impl NodePipeline {
         batch.push(event);
         batch.extend(crossings);
 
-        let offset = match self.log.lock().await.append(producer_id, &batch).await {
-            Ok(offset) => offset,
-            Err(e) => {
-                if let Some(OtkEvent::Detection(det)) = batch.first() {
-                    warn!(
-                        producer = %producer_id,
-                        detector = %det.detector_id,
-                        sequence = det.sequence_number,
-                        error = %e,
-                        "append failed AFTER processor consumed the detection; \
-                         processor state has advanced past storage. Producer retries \
-                         of this sequence will be re-gated (high-water NOT advanced) \
-                         but the crossing-grouping window may have moved on."
-                    );
-                }
-                return Err(e);
-            }
-        };
+        let offset = self.log.lock().await.append(producer_id, &batch).await?;
 
         // ── Phase 3: commit ───────────────────────────────────────────
-        // Storage append succeeded. Advance the gate's high-water mark
-        // so future deliveries of this sequence are dropped as duplicates,
-        // and now (and only now) meter any gap we observed in Phase 1.
-        // Deferring the metric until after the append guarantees each
-        // true gap counts exactly once: a transient storage failure that
-        // forces the producer to retry won't re-meter the same gap on
-        // the second peek.
+        // Storage append succeeded. Three things happen in this phase,
+        // all of which would have been wrong to do in Phase 2:
+        //
+        // 1. Advance the gate's high-water mark so future deliveries of
+        //    this sequence are dropped as duplicates.
+        // 2. Apply the same grouping logic the peek used, but mutating
+        //    the processor's pending state (`commit_detection`). The
+        //    return value is intentionally discarded: the crossings
+        //    already went into the batch via the Phase 2 peek, and in
+        //    single-threaded use (this mutex guarantees that) the two
+        //    calls return identical Vecs. A `debug_assert_eq` would be
+        //    appealing but would require deriving `PartialEq` on
+        //    `Crossing` across the workspace; we accept the contract on
+        //    `CrossingProcessor::commit_detection` instead.
+        // 3. Meter any gap we observed in Phase 1. Deferring the metric
+        //    until after the append guarantees each true gap counts
+        //    exactly once: a transient storage failure that forces the
+        //    producer to retry won't re-meter the same gap on the
+        //    second peek.
         if let Some(OtkEvent::Detection(det)) = batch.first() {
             self.gate.commit(producer_id, det);
+            let _ = self
+                .processor
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .commit_detection(det.clone());
             if let Some((expected, got)) = pending_gap {
                 warn!(
                     producer = %producer_id,
