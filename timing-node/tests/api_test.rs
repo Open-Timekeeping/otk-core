@@ -55,6 +55,7 @@ fn connect_envelope(producer_id: &str) -> OtkEnvelope {
             })
             .unwrap(),
         ),
+        traceparent: None,
     }
 }
 
@@ -67,6 +68,7 @@ fn event_envelope(producer_id: &str, seq: u64, event: OtkEvent) -> OtkEnvelope {
         sequence_number: Some(seq),
         correlation_id: None,
         payload: Some(minicbor::to_vec(&event).unwrap()),
+        traceparent: None,
     }
 }
 
@@ -79,6 +81,7 @@ fn disconnect_envelope(producer_id: &str) -> OtkEnvelope {
         sequence_number: None,
         correlation_id: None,
         payload: None,
+        traceparent: None,
     }
 }
 

@@ -47,6 +47,7 @@ pub mod handshake;
 pub mod heartbeat;
 pub mod ids;
 pub mod message;
+pub mod traceparent;
 
 pub use envelope::{MessageType, OtkEnvelope};
 pub use error::{ErrorCode, ErrorMessage};
@@ -54,6 +55,9 @@ pub use handshake::{Connect, ConnectAck, ConnectReject, ConnectRejectReason};
 pub use heartbeat::Heartbeat;
 pub use ids::{CorrelationId, ProducerId};
 pub use message::OtkMessage;
+pub use traceparent::{
+    format_traceparent, is_valid_traceparent, parse_traceparent, TraceParentError, TraceParentParts,
+};
 
 /// The OTK wire protocol version implemented by this crate.
 pub const PROTOCOL_VERSION: u8 = 0;

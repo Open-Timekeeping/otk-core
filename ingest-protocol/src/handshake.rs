@@ -135,6 +135,10 @@ fn server_envelope(
         sequence_number: None,
         correlation_id,
         payload,
+        // Server-originated envelopes (ConnectAck / ConnectReject) carry
+        // no traceparent; the server is the trace root for its own
+        // operations.
+        traceparent: None,
     }
 }
 
@@ -188,6 +192,7 @@ mod tests {
             sequence_number: None,
             correlation_id: None,
             payload: Some(minicbor::to_vec(&connect).unwrap()),
+            traceparent: None,
         }
     }
 
@@ -230,6 +235,7 @@ mod tests {
             sequence_number: None,
             correlation_id: None,
             payload: None,
+            traceparent: None,
         };
         let err = perform_server_handshake(env).expect_err("must error");
         assert!(matches!(err, HandshakeError::UnexpectedMessageType(_)));
@@ -285,6 +291,7 @@ mod tests {
             sequence_number: None,
             correlation_id: None,
             payload: Some(minicbor::to_vec(&connect).unwrap()),
+            traceparent: None,
         }
     }
 

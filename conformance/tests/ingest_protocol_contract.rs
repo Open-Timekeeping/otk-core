@@ -40,6 +40,7 @@ fn connect_envelope_with_token(
         sequence_number: None,
         correlation_id: None,
         payload: Some(minicbor::to_vec(&connect).unwrap()),
+        traceparent: None,
     }
 }
 
@@ -52,6 +53,7 @@ fn data_envelope(mt: MessageType, payload: Option<Vec<u8>>, producer: &str) -> O
         sequence_number: None,
         correlation_id: None,
         payload,
+        traceparent: None,
     }
 }
 

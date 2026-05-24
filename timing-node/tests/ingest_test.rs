@@ -56,6 +56,7 @@ fn make_connect_envelope(producer_id: &str) -> OtkEnvelope {
         sequence_number: None,
         correlation_id: None,
         payload: Some(minicbor::to_vec(&connect).expect("Connect encodes")),
+        traceparent: None,
     }
 }
 
@@ -68,6 +69,7 @@ fn make_event_envelope(producer_id: &str, seq: u64, event: OtkEvent) -> OtkEnvel
         sequence_number: Some(seq),
         correlation_id: None,
         payload: Some(minicbor::to_vec(&event).expect("OtkEvent encodes")),
+        traceparent: None,
     }
 }
 
@@ -80,6 +82,7 @@ fn make_disconnect_envelope(producer_id: &str) -> OtkEnvelope {
         sequence_number: None,
         correlation_id: None,
         payload: None,
+        traceparent: None,
     }
 }
 
@@ -219,6 +222,7 @@ async fn version_mismatch_rejected() {
         sequence_number: None,
         correlation_id: None,
         payload: Some(minicbor::to_vec(&connect).unwrap()),
+        traceparent: None,
     };
     stream.write_all(&encode_frame(&env)).await.unwrap();
 
