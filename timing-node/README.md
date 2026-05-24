@@ -134,7 +134,12 @@ unauthenticated so external probes and Prometheus scrapers can reach them.
 - `Detection` events routed through `CrossingProcessor`; resulting
   crossings persisted as `OtkEvent::Crossing` log entries.
 - Sequence-gate enforcement per-`(producer_id, detector_id)`. Duplicates
-  dropped silently; gaps logged and metered.
+  dropped silently; gaps logged and metered. **Restart resume**: on
+  `Node::new`, the gate's high-water marks are rebuilt from every
+  Detection still in the persisted log so a producer that reconnects
+  after a node restart cannot replay a previously-acknowledged
+  sequence. The seed runs before any ingest listener accepts a
+  connection.
 - REST and SSE query API (`/api/v1/status`, `/api/v1/events`,
   `/api/v1/events/stream`) with bearer-token authentication when
   `auth.api_tokens` is non-empty.
@@ -155,8 +160,6 @@ unauthenticated so external probes and Prometheus scrapers can reach them.
 - TLS on the ingest listener (rustls plumbing planned; current advice
   for wire-encryption deployments is to run OTK over an SSH tunnel or
   WireGuard).
-- Sequence-gate restart persistence (high-water marks rebuilt from the
-  segment log on startup).
 - Non-TCP/Unix transport bindings (USB CDC, serial, raw Ethernet).
 - Plugin loading (`plugin-api` not yet specified).
 - Detector and timebase registry.
