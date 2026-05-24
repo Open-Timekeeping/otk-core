@@ -42,7 +42,7 @@ fn det(seq: u64) -> OtkEvent {
 async fn populated_log(n: u64) -> MemLog {
     let mut log = MemLog::new();
     for i in 0..n {
-        log.append(&[det(i)]).await.unwrap();
+        log.append("test-producer", &[det(i)]).await.unwrap();
     }
     log
 }
@@ -200,7 +200,7 @@ async fn evict_below_clamps_boundary_past_log_end() {
     );
 
     // A new append succeeds and is readable, not immediately evicted.
-    log.append(&[det(10)]).await.unwrap();
+    log.append("test-producer", &[det(10)]).await.unwrap();
     let entries = log
         .read_range(Offset::new(10), Some(Offset::new(11)))
         .await

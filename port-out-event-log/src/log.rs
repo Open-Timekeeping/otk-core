@@ -71,8 +71,20 @@ pub trait LogSubscription: Send {
 pub trait EventLog: Send {
     /// Append one or more events. Returns the offset of the last appended event.
     ///
+    /// `producer_id` is the producer that delivered (or triggered) every
+    /// event in this batch. It is persisted alongside each event so the
+    /// runtime can rebuild per-`(producer_id, detector_id)` state (notably
+    /// the sequence-gate high-water marks) on restart. A batch is always
+    /// single-producer in practice: the pipeline composes a detection and
+    /// the crossings it triggered into one append for atomicity, and the
+    /// crossings inherit the originating producer's id. See
+    /// [`LogEntry::producer_id`] for the semantics.
+    ///
     /// The events slice must not be empty; passing an empty slice returns
-    /// [`StorageError::InvalidInput`].
+    /// [`StorageError::InvalidInput`]. `producer_id` must not be empty
+    /// either; empty strings are rejected with `InvalidInput` because they
+    /// would collapse every producer-less event together in the gate's
+    /// keyspace and silently break replay detection.
     ///
     /// Append is atomic: either all events in the slice are committed with
     /// consecutive monotonically increasing offsets, or none are and an error
@@ -83,7 +95,11 @@ pub trait EventLog: Send {
     /// The durability guarantee on success is backend-defined. Backends should
     /// document whether `Ok` implies fsync-level persistence or acceptance into
     /// OS buffers.
-    async fn append(&mut self, events: &[OtkEvent]) -> Result<Offset, StorageError>;
+    async fn append(
+        &mut self,
+        producer_id: &str,
+        events: &[OtkEvent],
+    ) -> Result<Offset, StorageError>;
 
     /// Read entries in `[from, to)`. If `to` is `None`, reads through the
     /// latest available offset.
@@ -175,7 +191,11 @@ mod tests {
 
     #[async_trait]
     impl EventLog for MockLog {
-        async fn append(&mut self, _events: &[OtkEvent]) -> Result<Offset, StorageError> {
+        async fn append(
+            &mut self,
+            _producer_id: &str,
+            _events: &[OtkEvent],
+        ) -> Result<Offset, StorageError> {
             Ok(Offset::new(0))
         }
         async fn read_range(

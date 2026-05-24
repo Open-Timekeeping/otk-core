@@ -32,21 +32,30 @@ fn det(seq: u64) -> OtkEvent {
 #[tokio::test]
 async fn append_single_returns_offset_zero() {
     let mut log = MemLog::new();
-    let offset = log.append(&[det(0)]).await.expect("append");
+    let offset = log
+        .append("test-producer", &[det(0)])
+        .await
+        .expect("append");
     assert_eq!(offset, Offset::new(0));
 }
 
 #[tokio::test]
 async fn append_batch_returns_last_offset() {
     let mut log = MemLog::new();
-    let offset = log.append(&[det(0), det(1), det(2)]).await.expect("append");
+    let offset = log
+        .append("test-producer", &[det(0), det(1), det(2)])
+        .await
+        .expect("append");
     assert_eq!(offset, Offset::new(2));
 }
 
 #[tokio::test]
 async fn append_empty_rejected_as_invalid_input() {
     let mut log = MemLog::new();
-    let err = log.append(&[]).await.expect_err("empty append must error");
+    let err = log
+        .append("test-producer", &[])
+        .await
+        .expect_err("empty append must error");
     assert!(matches!(
         err,
         port_out_event_log::StorageError::InvalidInput(_)
@@ -56,7 +65,9 @@ async fn append_empty_rejected_as_invalid_input() {
 #[tokio::test]
 async fn read_range_returns_entries_in_order() {
     let mut log = MemLog::new();
-    log.append(&[det(0), det(1), det(2)]).await.unwrap();
+    log.append("test-producer", &[det(0), det(1), det(2)])
+        .await
+        .unwrap();
     let entries = log
         .read_range(Offset::new(0), Some(Offset::new(3)))
         .await
@@ -64,7 +75,24 @@ async fn read_range_returns_entries_in_order() {
     assert_eq!(entries.len(), 3);
     for (i, e) in entries.iter().enumerate() {
         assert_eq!(e.offset.as_u64(), i as u64);
+        assert_eq!(
+            e.producer_id, "test-producer",
+            "producer_id must be carried through to read_range"
+        );
     }
+}
+
+#[tokio::test]
+async fn append_rejects_empty_producer_id() {
+    let mut log = MemLog::new();
+    let err = log
+        .append("", &[det(0)])
+        .await
+        .expect_err("empty producer_id must error");
+    assert!(matches!(
+        err,
+        port_out_event_log::StorageError::InvalidInput(_)
+    ));
 }
 
 #[tokio::test]
@@ -72,7 +100,9 @@ async fn latest_and_earliest_offsets_reflect_state() {
     let mut log = MemLog::new();
     assert!(log.latest_offset().await.unwrap().is_none());
     assert!(log.earliest_offset().await.unwrap().is_none());
-    log.append(&[det(0), det(1)]).await.unwrap();
+    log.append("test-producer", &[det(0), det(1)])
+        .await
+        .unwrap();
     assert_eq!(log.latest_offset().await.unwrap(), Some(Offset::new(1)));
     assert_eq!(log.earliest_offset().await.unwrap(), Some(Offset::new(0)));
 }
@@ -80,7 +110,7 @@ async fn latest_and_earliest_offsets_reflect_state() {
 #[tokio::test]
 async fn subscribe_delivers_backfill_and_live() {
     let mut log = MemLog::new();
-    log.append(&[det(0)]).await.unwrap();
+    log.append("test-producer", &[det(0)]).await.unwrap();
     let mut sub = log.subscribe(Offset::new(0)).await.unwrap();
 
     // Backfill: first entry already on disk.
@@ -88,7 +118,7 @@ async fn subscribe_delivers_backfill_and_live() {
     assert_eq!(first.offset, Offset::new(0));
 
     // Live: append after subscribe must surface.
-    log.append(&[det(1)]).await.unwrap();
+    log.append("test-producer", &[det(1)]).await.unwrap();
     let second = sub.next_entry().await.expect("entry").expect("ok");
     assert_eq!(second.offset, Offset::new(1));
 
@@ -100,6 +130,6 @@ async fn event_log_is_dyn_safe() {
     // Compile-time evidence that any backend can be boxed behind the trait.
     let mut log: Box<dyn EventLog> = Box::new(MemLog::new());
     assert!(log.latest_offset().await.unwrap().is_none());
-    log.append(&[det(0)]).await.unwrap();
+    log.append("test-producer", &[det(0)]).await.unwrap();
     assert_eq!(log.latest_offset().await.unwrap(), Some(Offset::new(0)));
 }
