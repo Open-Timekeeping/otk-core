@@ -171,6 +171,6 @@ Regardless of model:
 - **Cross-process data is OTK frames.** Across any process boundary, canonical events are wrapped in the OTK message envelope and encoded into frames per [`otk-protocol`](../otk-protocol) and [`frame-codec`](../frame-codec), then carried by a transport binding.
 - **Adapter and timebase identity is registered.** Every producer / plugin announces what it is at startup.
 - **Health is reported continuously.** Detectors and timebases report their own state; the runtime does not invent it.
-- **Sequence numbers persist across reconnects.** Producers that disconnect and return resume cleanly from a known sequence number.
+- **Sequence numbers persist across reconnects.** Producers that disconnect and return resume cleanly from a known sequence number. The runtime side of the contract survives **node** restarts too: the gate's per-`(producer_id, detector_id)` high-water marks are rebuilt from the segment log on startup, so an acknowledged sequence is still recognised as a duplicate after the node has been bounced.
 
 If those things hold, the runtime node treats every model identically.
