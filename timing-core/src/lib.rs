@@ -16,11 +16,13 @@
 //!
 //! let mut processor = CrossingProcessor::new(ProcessorConfig::default());
 //!
-//! // Feed detections as they arrive
+//! // Feed detections as they arrive. The peek/commit split lets the
+//! // caller persist the crossings before advancing processor state:
 //! for detection in incoming {
-//!     for crossing in processor.push_detection(detection) {
-//!         // handle committed crossing
-//!     }
+//!     let crossings = processor.peek_detection(&detection);
+//!     // ... persist `crossings` (and `detection`) downstream ...
+//!     // On success, advance the processor's grouping window:
+//!     processor.commit_detection(detection);
 //! }
 //!
 //! // Commit any remaining groups at end of session
