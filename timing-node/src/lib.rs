@@ -17,7 +17,7 @@ pub use config::{load_from_file, ApiConfig, AuthConfig, ListenerConfig, NodeConf
 pub use metrics::Metrics;
 pub use pipeline::{AppendOutcome, NodePipeline};
 pub use ports::{EventEntry, EventPage, EventQueryPort, QueryError};
-pub use sequence_gate::{GateDecision, SequenceGate};
+pub use sequence_gate::{seed_from_log, seed_from_log_box, GateDecision, SequenceGate};
 
 use std::sync::Arc;
 
@@ -173,7 +173,23 @@ impl Node {
         };
         let log = SegmentLog::open(log_config).await?;
         let metrics = Arc::new(Metrics::new());
-        let pipeline = Arc::new(NodePipeline::new(Box::new(log), Arc::clone(&metrics)));
+
+        // Restart resume: rebuild the sequence gate's per-(producer_id,
+        // detector_id) high-water marks from every Detection still in the
+        // log. Without this seed, a producer reconnecting after a node
+        // restart with the same producer_id can silently replay sequences.
+        // Done BEFORE wrapping the log in a Mutex and BEFORE spawning any
+        // listener so the seed completes uncontended and is fully visible
+        // by the time the first connection is accepted.
+        let gate = Arc::new(crate::sequence_gate::SequenceGate::new());
+        let mut log_boxed: Box<dyn port_out_event_log::EventLog> = Box::new(log);
+        crate::sequence_gate::seed_from_log_box(&gate, &mut log_boxed).await?;
+
+        let pipeline = Arc::new(NodePipeline::new(
+            log_boxed,
+            Arc::clone(&metrics),
+            Arc::clone(&gate),
+        ));
 
         Ok(Self {
             ingest,

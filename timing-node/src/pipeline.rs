@@ -56,16 +56,21 @@ pub enum AppendOutcome {
 }
 
 impl NodePipeline {
-    /// Build a pipeline around an externally-constructed event log.
+    /// Build a pipeline around an externally-constructed event log and a
+    /// pre-seeded sequence gate.
     ///
     /// The log is type-erased so the runtime depends on the `EventLog` port,
-    /// not on any concrete storage backend.
-    pub fn new(log: Box<dyn EventLog>, metrics: Arc<Metrics>) -> Self {
+    /// not on any concrete storage backend. The gate is passed in (rather
+    /// than constructed here) so the composition root can call
+    /// [`crate::sequence_gate::seed_from_log_box`] against the opened log
+    /// before any ingest listener spawns, restoring per-producer high-water
+    /// marks across node restarts.
+    pub fn new(log: Box<dyn EventLog>, metrics: Arc<Metrics>, gate: Arc<SequenceGate>) -> Self {
         let processor = CrossingProcessor::new(ProcessorConfig::default());
         Self {
             log: Arc::new(tokio::sync::Mutex::new(log)),
             processor: Arc::new(Mutex::new(processor)),
-            gate: Arc::new(SequenceGate::new()),
+            gate,
             metrics,
         }
     }
@@ -341,7 +346,8 @@ mod tests {
         };
         let log = SegmentLog::open(log_config).await.expect("open log");
         let metrics = Arc::new(Metrics::new());
-        NodePipeline::new(Box::new(log), metrics)
+        let gate = Arc::new(SequenceGate::new());
+        NodePipeline::new(Box::new(log), metrics, gate)
     }
 
     fn make_detection() -> Detection {
