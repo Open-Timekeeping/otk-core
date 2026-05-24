@@ -242,3 +242,61 @@ impl EventIngestPort for UnixSocketIngestPort {
         Ok(Box::new(session))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn valid_config(dir: &TempDir) -> UnixSocketIngestConfig {
+        UnixSocketIngestConfig {
+            socket_path: dir.path().join("otk.sock"),
+            max_frame_bytes: 65_535,
+            handshake_timeout: Duration::from_secs(5),
+            socket_permissions: None,
+            force_rebind: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_zero_max_frame_bytes() {
+        let dir = TempDir::new().unwrap();
+        let cfg = UnixSocketIngestConfig {
+            max_frame_bytes: 0,
+            ..valid_config(&dir)
+        };
+        // `expect_err` would require `UnixSocketIngestPort: Debug`, which it
+        // isn't (it carries `Arc<dyn ConnectAuthoriser>`). Pattern-match instead.
+        match UnixSocketIngestPort::bind(cfg).await {
+            Err(IngestError::Io(io_err)) => {
+                assert_eq!(io_err.kind(), io::ErrorKind::InvalidInput);
+                assert!(
+                    io_err.to_string().contains("max_frame_bytes"),
+                    "error message should mention the offending field, got {io_err}"
+                );
+            }
+            Err(other) => panic!("expected IngestError::Io, got {other:?}"),
+            Ok(_) => panic!("zero max_frame_bytes should be rejected"),
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_zero_handshake_timeout() {
+        let dir = TempDir::new().unwrap();
+        let cfg = UnixSocketIngestConfig {
+            handshake_timeout: Duration::ZERO,
+            ..valid_config(&dir)
+        };
+        match UnixSocketIngestPort::bind(cfg).await {
+            Err(IngestError::Io(io_err)) => {
+                assert_eq!(io_err.kind(), io::ErrorKind::InvalidInput);
+                assert!(
+                    io_err.to_string().contains("handshake_timeout"),
+                    "error message should mention the offending field, got {io_err}"
+                );
+            }
+            Err(other) => panic!("expected IngestError::Io, got {other:?}"),
+            Ok(_) => panic!("zero handshake_timeout should be rejected"),
+        }
+    }
+}

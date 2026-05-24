@@ -132,13 +132,15 @@ impl Node {
                     id,
                     socket_path,
                     max_frame_bytes,
+                    socket_permissions,
+                    force_rebind,
                 } => {
                     let cfg = adapter_ingest_unix_socket::UnixSocketIngestConfig {
                         socket_path: socket_path.clone(),
                         max_frame_bytes: *max_frame_bytes,
                         handshake_timeout: std::time::Duration::from_secs(5),
-                        socket_permissions: None,
-                        force_rebind: false,
+                        socket_permissions: *socket_permissions,
+                        force_rebind: *force_rebind,
                     };
                     let port = adapter_ingest_unix_socket::UnixSocketIngestPort::bind_with_auth(
                         cfg,
