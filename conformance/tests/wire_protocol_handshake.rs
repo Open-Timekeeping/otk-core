@@ -26,6 +26,7 @@ fn connect_envelope_roundtrip() {
         sequence_number: None,
         correlation_id: None,
         payload: Some(connect_bytes.clone()),
+        traceparent: None,
     };
     let env_bytes = minicbor::to_vec(&envelope).expect("encode envelope");
     let decoded: OtkEnvelope = minicbor::decode(&env_bytes).expect("decode envelope");

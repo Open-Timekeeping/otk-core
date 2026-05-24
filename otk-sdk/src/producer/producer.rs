@@ -243,6 +243,10 @@ fn make_envelope(
         sequence_number: None,
         correlation_id: None,
         payload,
+        // Phase A: field plumbed through but never populated yet. The
+        // producer-side auto-extraction from the current tracing span
+        // lands in Phase C.
+        traceparent: None,
     }
 }
 

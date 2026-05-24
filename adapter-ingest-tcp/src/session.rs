@@ -245,6 +245,7 @@ mod tests {
             sequence_number: None,
             correlation_id: None,
             payload: Some(minicbor::to_vec(&connect).unwrap()),
+            traceparent: None,
         };
         let frame = encode_stream(&env, 65_535).unwrap();
         stream.write_all(&frame).await.unwrap();
@@ -277,6 +278,7 @@ mod tests {
             sequence_number: None,
             correlation_id: None,
             payload,
+            traceparent: None,
         }
     }
 
@@ -343,6 +345,7 @@ mod tests {
                 sequence_number: None,
                 correlation_id: None,
                 payload: Some(minicbor::to_vec(&connect).unwrap()),
+                traceparent: None,
             };
             let frame = encode_stream(&env, 65_535).unwrap();
             stream.write_all(&frame).await.unwrap();

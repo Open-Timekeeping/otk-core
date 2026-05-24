@@ -30,6 +30,7 @@ fn envelope(producer: &str) -> OtkEnvelope {
         sequence_number: None,
         correlation_id: None,
         payload: None,
+        traceparent: None,
     }
 }
 

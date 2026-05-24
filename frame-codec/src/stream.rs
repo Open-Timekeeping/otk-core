@@ -170,6 +170,7 @@ mod tests {
             sequence_number: None,
             correlation_id: None,
             payload: None,
+            traceparent: None,
         }
     }
 
