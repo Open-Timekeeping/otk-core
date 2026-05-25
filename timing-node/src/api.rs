@@ -197,28 +197,10 @@ fn parse_bearer_token(raw: &str) -> Option<&str> {
 /// prefix one byte at a time. An attacker who can repeatedly probe the
 /// endpoint can byte-by-byte recover a short shared secret. This routine
 /// XOR-accumulates every byte before returning, so an equal-length wrong
-/// guess takes the same time as an equal-length right guess regardless
-/// of where the mismatch sits.
-///
-/// What this does not protect against: a length mismatch returns early.
-/// An attacker can therefore learn the configured token's length by
-/// probing different lengths. In this threat model the configured token
-/// length is treated as not-secret (it is fixed at boot, the operator
-/// controls it, and any token issued by the operator should carry enough
-/// entropy at any plausible length that length is not the relevant
-/// secret). If that assumption ever changes, switch to a constant-time
-/// crate (`subtle::ConstantTimeEq`) and pad both inputs to a fixed
-/// maximum.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff: u8 = 0;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
+// `constant_time_eq` lives in `crate::auth` so the producer-side
+// authoriser and this API-side middleware share one impl. See the doc
+// comment there for the timing-safety contract and its limits.
+use crate::auth::constant_time_eq;
 
 async fn healthz() -> StatusCode {
     StatusCode::OK
@@ -519,14 +501,5 @@ mod tests {
         assert_eq!(parse_bearer_token("Bearer "), None); // empty token after trim
         assert_eq!(parse_bearer_token("Bearer  \t "), None); // only whitespace
         assert_eq!(parse_bearer_token(""), None);
-    }
-
-    #[test]
-    fn constant_time_eq_basic() {
-        assert!(constant_time_eq(b"abc", b"abc"));
-        assert!(!constant_time_eq(b"abc", b"abd"));
-        assert!(!constant_time_eq(b"abc", b"abcd")); // length mismatch
-        assert!(!constant_time_eq(b"", b"a"));
-        assert!(constant_time_eq(b"", b""));
     }
 }
