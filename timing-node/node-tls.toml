@@ -1,0 +1,42 @@
+# Sample TLS-enabled timing-node config (mTLS by default; comment
+# out `client_ca` for server-auth-only).
+#
+# Paths below are RELATIVE TO THE PROCESS WORKING DIRECTORY. The
+# defaults assume the workspace-root flow:
+#
+#     cargo run -p otk-devcerts -- --out ./dev-certs
+#     cargo run -p timing-node --bin otk-node -- --config timing-node/node-tls.toml
+#     cargo run -p producer-simulated --bin otk-simulator -- --config producer-simulated/sim-start-tls.toml
+#
+# Run from the WORKSPACE ROOT so `./dev-certs/*.pem` resolves to the
+# bundle `otk-devcerts` just emitted. The matching producer-side
+# config is `producer-simulated/sim-start-tls.toml`; the two sample
+# files line up to be a working pair out of the box.
+node_id     = "otk-node"
+api_addr    = "127.0.0.1:8080"
+storage_dir = "./data"
+
+[[listeners]]
+transport = "tcp"
+id        = "tls-main"
+bind_addr = "127.0.0.1:8463"
+
+[listeners.tls]
+# Leaf cert + intermediate chain. `otk-devcerts` writes
+# server-chain.pem as `server-cert.pem + server-ca.pem` in one file,
+# which is exactly the shape rustls expects.
+cert_chain  = "./dev-certs/server-chain.pem"
+private_key = "./dev-certs/server-key.pem"
+# Optional. Setting this turns the listener into mutual TLS: clients
+# without a cert chained to this CA are rejected at the TLS handshake
+# (TLS 1.3 alert 116, `certificate_required`) before the OTK Connect
+# handshake starts. Comment this line out for server-auth-only TLS.
+client_ca   = "./dev-certs/client-ca.pem"
+
+# Empty allow-lists below = development / unauthenticated mode (the
+# node logs a warning at startup). For a real deployment, populate
+# at least one shared secret in each list. mTLS above + a token here
+# is the defense-in-depth pattern; see timing-node/README.md.
+[auth]
+producer_tokens = []
+api_tokens      = []

@@ -117,13 +117,34 @@ client_ca   = "/etc/otk/client-ca.pem"  # optional: enables mTLS
 
 The easiest path: use the bundled [`otk-devcerts`](../otk-devcerts)
 generator. One command emits a working server CA + leaf and a client
-CA + leaf with the right two-tier structure rustls expects:
+CA + leaf with the right two-tier structure rustls expects.
+
+The two shipped sample configs ([`timing-node/node-tls.toml`](./node-tls.toml)
+and [`producer-simulated/sim-start-tls.toml`](../producer-simulated/sim-start-tls.toml))
+expect their PEM material under `./dev-certs/` **relative to the
+working directory the process was started from**. From the workspace
+root, the full TLS demo is three commands:
 
 ```sh
+# 1. Emit the cert bundle into ./dev-certs/ (run once per machine;
+#    re-run to rotate).
 cargo run -p otk-devcerts -- --out ./dev-certs
-# Output names the exact TOML lines to copy into both this config
-# and the producer's TLS config.
+
+# 2. Start the mTLS-enabled node.
+cargo run -p timing-node --bin otk-node -- --config timing-node/node-tls.toml
+
+# 3. In another terminal, start a producer that presents a client cert.
+cargo run -p producer-simulated --bin otk-simulator -- \
+    --config producer-simulated/sim-start-tls.toml
 ```
+
+The two sample TOMLs reference matching PEM paths (`./dev-certs/server-chain.pem`,
+`./dev-certs/server-ca.pem`, `./dev-certs/client-ca.pem`,
+`./dev-certs/client-cert.pem`, `./dev-certs/client-key.pem`) and a
+matching SNI (`server_name = "localhost"`, matching `otk-devcerts`'s
+default leaf SAN of `DNS:localhost,IP:127.0.0.1,IP:::1`). If you
+ran `otk-devcerts` with non-default `--server-cn` or `--server-san`,
+update the sample's `server_name` accordingly.
 
 If you prefer to bring your own certs (openssl, step-ca, your
 organisation's PKI, etc.), the requirements are: PEM-encoded leaf +
@@ -133,9 +154,9 @@ A self-signed leaf will fail handshake with `CaUsedAsEndEntity`;
 rustls needs a real two-tier root → leaf shape.
 
 Producers using `otk-sdk` with the `producer-tls` feature connect via
-`Transport::Tls { addr, config: TlsClientConfig { ... } }`. See the
-producer-simulated `sim-start-tls.toml` sample for a complete client
-config.
+`Transport::Tls { addr, config: TlsClientConfig { ... } }`. See
+[`producer-simulated/sim-start-tls.toml`](../producer-simulated/sim-start-tls.toml)
+for the complete client-side TOML schema.
 
 `transport = "unix-socket"` (Unix targets only; configs containing this
 variant parse cleanly on Windows but `Node::new` fails the build at

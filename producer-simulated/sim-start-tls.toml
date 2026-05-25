@@ -1,8 +1,17 @@
 # Sample TLS-enabled simulator config. Mirrors sim-start.toml but
 # connects over TLS (mTLS when both `client_cert` and `client_key`
-# are set). Edit the paths to point at your own cert material; the
-# values below assume you ran the recipe in `timing-node/README.md`
-# § "TLS" against a node configured with `[listeners.tls]`.
+# are set).
+#
+# Paths below are RELATIVE TO THE PROCESS WORKING DIRECTORY. The
+# defaults assume the workspace-root flow:
+#
+#     cargo run -p otk-devcerts -- --out ./dev-certs
+#     cargo run -p timing-node --bin otk-node -- --config timing-node/node-tls.toml
+#     cargo run -p producer-simulated --bin otk-simulator -- --config producer-simulated/sim-start-tls.toml
+#
+# Run from the WORKSPACE ROOT so `./dev-certs/*.pem` resolves to the
+# bundle `otk-devcerts` just emitted. If you stage cert material
+# elsewhere, edit the four paths below to match.
 node_addr             = "127.0.0.1:8463"
 detector_id           = "sim-start"
 producer_id           = "sim-start"
@@ -11,15 +20,18 @@ subject_ids           = ["car-1", "car-2", "car-3"]
 detection_interval_ms = 2000
 
 [tls]
-# PEM bundle the producer should trust as a server-cert root. For a
-# self-signed dev deployment, point at the server's own CA cert.
-trust_roots = "./server-ca.pem"
+# PEM bundle the producer should trust as a server-cert root. Matches
+# what `otk-devcerts` writes as the server-side root CA.
+trust_roots = "./dev-certs/server-ca.pem"
 # SNI sent in the ClientHello. Must match a Subject Alternative Name
-# on the server's leaf cert.
-server_name = "otk-node.lan"
+# on the server's leaf cert. `otk-devcerts`'s default leaf has SANs
+# DNS:localhost,IP:127.0.0.1,IP:::1 and CN=localhost, so this works
+# out of the box; if you ran `otk-devcerts --server-cn foo.example`,
+# change this to match.
+server_name = "localhost"
 # For server-auth-only TLS, leave the next two unset.
 # For mutual TLS, both must be set: the producer presents this cert
 # chain to the server, which validates it against `[listeners.tls]
 # client_ca` (see timing-node/README.md § TLS).
-client_cert = "./sim-cert.pem"
-client_key  = "./sim-key.pem"
+client_cert = "./dev-certs/client-cert.pem"
+client_key  = "./dev-certs/client-key.pem"
