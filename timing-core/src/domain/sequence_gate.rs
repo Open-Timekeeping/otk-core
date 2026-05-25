@@ -12,7 +12,7 @@
 //!   seeds its high-water mark at that sequence number.
 //! - **Strictly increasing** sequence: accepted; high-water advances.
 //! - **Duplicate** (≤ high-water): rejected as [`GateDecision::Duplicate`].
-//!   The pipeline drops the event without persisting. Producers may safely
+//!   The service drops the event without persisting. Producers may safely
 //!   re-send after a reconnect without polluting the log.
 //! - **Gap** (> high-water + 1): accepted but reported as
 //!   [`GateDecision::Gap`] so the runtime can log/meter it. The producer is
@@ -31,8 +31,9 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use event_model::{Detection, DetectorId, OtkEvent};
-use port_out_event_log::{EventLog, StorageError};
 use tracing::{debug, info};
+
+use crate::ports::outbound::{EventLog, StorageError};
 
 /// Outcome of checking a single detection against the gate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -345,23 +346,20 @@ mod tests {
     }
 
     // ── seed_from_log ─────────────────────────────────────────────────────
+    //
+    // These tests exercise `seed_from_log` against the in-memory
+    // [`crate::testing::MockEventLog`]. The end-to-end "real backend +
+    // restart" behaviour is covered by `restart_resume_test` in
+    // `timing-node`; see the `testing` module's doc comment for why we
+    // don't dev-depend the real segment-log adapter here.
 
-    use adapter_event_log_segment::{SegmentLog, SegmentLogConfig};
     use event_model::OtkEvent;
 
-    async fn make_log_in(dir: &tempfile::TempDir) -> SegmentLog {
-        SegmentLog::open(SegmentLogConfig {
-            dir: dir.path().to_path_buf(),
-            ..SegmentLogConfig::default()
-        })
-        .await
-        .expect("open log")
-    }
+    use crate::testing::MockEventLog;
 
     #[tokio::test]
     async fn seed_from_empty_log_is_noop() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut log = make_log_in(&dir).await;
+        let mut log = MockEventLog::new();
         let gate = SequenceGate::new();
         let scanned = seed_from_log(&gate, &mut log).await.unwrap();
         assert_eq!(scanned, 0);
@@ -371,8 +369,7 @@ mod tests {
 
     #[tokio::test]
     async fn seed_rebuilds_high_water_from_persisted_detections() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut log = make_log_in(&dir).await;
+        let mut log = MockEventLog::new();
 
         // Producer "p" wrote sequences 1, 2, 3 for loop-1; producer "q"
         // wrote sequence 5 for loop-2. After a restart the gate must
@@ -417,8 +414,7 @@ mod tests {
     async fn seed_ignores_non_detection_events() {
         use event_model::{DetectorHealthEvent, DetectorHealthStatus};
 
-        let dir = tempfile::tempdir().unwrap();
-        let mut log = make_log_in(&dir).await;
+        let mut log = MockEventLog::new();
 
         log.append(
             "p",
@@ -438,38 +434,5 @@ mod tests {
         assert_eq!(scanned, 1);
         // But the gate state is untouched: the next Detection is fresh.
         assert_eq!(gate.check("p", &det("loop-1", 1)), GateDecision::Accept);
-    }
-
-    #[tokio::test]
-    async fn seed_survives_close_and_reopen() {
-        // End-to-end of the actual restart-resume path: write detections,
-        // close the log, reopen, seed the gate, verify the high-water
-        // marks travel correctly across the open/close boundary.
-        let dir = tempfile::tempdir().unwrap();
-        {
-            let mut log = make_log_in(&dir).await;
-            log.append("p", &[OtkEvent::Detection(det("loop-1", 10))])
-                .await
-                .unwrap();
-            log.append("p", &[OtkEvent::Detection(det("loop-1", 11))])
-                .await
-                .unwrap();
-        }
-        // First log handle dropped: simulates process exit.
-
-        let mut log = make_log_in(&dir).await;
-        let gate = SequenceGate::new();
-        seed_from_log(&gate, &mut log).await.unwrap();
-
-        assert!(matches!(
-            gate.check("p", &det("loop-1", 11)),
-            GateDecision::Duplicate { high_water: 11, .. }
-        ));
-        assert!(matches!(
-            gate.check("p", &det("loop-1", 12)),
-            GateDecision::Advance {
-                previous_high_water: 11
-            }
-        ));
     }
 }

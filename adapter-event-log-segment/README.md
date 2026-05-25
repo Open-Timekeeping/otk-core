@@ -1,22 +1,22 @@
 # adapter-event-log-segment
 
-Segment-file event log backend for Open Timekeeping. Implements the `EventLog` trait from [`port-out-event-log`](../port-out-event-log) using fixed-budget segment files on local disk.
+Segment-file event log backend for Open Timekeeping. Implements the `EventLog` trait from [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) in `timing_core::ports::outbound` using fixed-budget segment files on local disk.
 
 > **Status: active.** Core implementation is complete: segment format, offset index, retention, crash recovery, live subscriptions. See [open questions](#open-questions) for deferred items.
 
 ## What this is
 
-`adapter-event-log-segment` is an outbound adapter in the OTK hexagonal architecture. It implements the `EventLog` trait from `port-out-event-log` using an append-only sequence of fixed-budget segment files on local disk, with companion offset indexes, retention enforcement by age and size, and live-subscribe semantics. It is the v0 storage backend; alternative backends can be added later behind the same port contract.
+`adapter-event-log-segment` is an outbound adapter in the OTK hexagonal architecture. It implements the `EventLog` trait from `timing_core::ports::outbound` using an append-only sequence of fixed-budget segment files on local disk, with companion offset indexes, retention enforcement by age and size, and live-subscribe semantics. It is the v0 storage backend; alternative backends can be added later behind the same port contract.
 
 ## Where this sits in the architecture
 
 ```text
-port-out-event-log/          outbound port contract (EventLog trait)
-adapter-event-log-segment/   implements port-out-event-log     <-- this crate
+timing-core/ports/outbound       outbound port contract (EventLog trait)
+adapter-event-log-segment/   implements timing_core::ports::outbound::EventLog     <-- this crate
 timing-node/                 injects this adapter at startup
 ```
 
-The timing node's **pipeline logic** depends on the `EventLog` trait from [`port-out-event-log`](../port-out-event-log), never on this crate's concrete `SegmentLog` type. `timing-node` itself, as the composition root, does pull this crate in as a Cargo dependency to construct the concrete backend and hand it to the pipeline behind the trait object. Swapping in an alternative storage backend (a different `port-out-event-log` impl) only touches the composition root; the pipeline is unchanged.
+The timing node's **pipeline logic** depends on the `EventLog` trait from [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) in `timing_core::ports::outbound`, never on this crate's concrete `SegmentLog` type. `timing-node` itself, as the composition root, does pull this crate in as a Cargo dependency to construct the concrete backend and hand it to the pipeline behind the trait object. Swapping in an alternative storage backend (a different `timing_core::ports::outbound` impl) only touches the composition root; the pipeline is unchanged.
 
 ## Design decisions
 
@@ -38,10 +38,10 @@ The timing node's **pipeline logic** depends on the `EventLog` trait from [`port
 
 ```rust
 use adapter_event_log_segment::{SegmentLog, SegmentLogConfig};
-use port_out_event_log::{EventLog, RetentionPolicy};
+use timing_core::ports::outbound::{EventLog, RetentionPolicy};
 use std::path::PathBuf;
 
-async fn open_log() -> Result<(), port_out_event_log::StorageError> {
+async fn open_log() -> Result<(), timing_core::ports::outbound::StorageError> {
     let config = SegmentLogConfig {
         dir: PathBuf::from("/var/lib/otk-node/log"),
         retention: RetentionPolicy::TimeBased { max_age_secs: 86400 },
@@ -54,14 +54,14 @@ async fn open_log() -> Result<(), port_out_event_log::StorageError> {
 
 ## Dependencies
 
-**Depends on:** [`port-out-event-log`](../port-out-event-log), [`event-model`](../event-model), `async-trait`, `minicbor`, `crc32fast`, `tokio`.
+**Depends on:** [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) in `timing_core::ports::outbound`, [`event-model`](../event-model), `async-trait`, `minicbor`, `crc32fast`, `tokio`.
 
 **Used by:** [`timing-node`](../timing-node) as its default storage backend.
 
 ## Open questions
 
 - **Background fsync task.** `flush_interval_ms > 0` skips per-append `sync_all()`, but there is no background flusher yet. Durability relies on OS write-back with no timer-based safety net.
-- **Time index.** Index by `appended_at_ns` for timestamp-range reads. Deferred until `port-out-event-log` adds a timestamp-range variant.
+- **Time index.** Index by `appended_at_ns` for timestamp-range reads. Deferred until `timing_core::ports::outbound` adds a timestamp-range variant.
 - **Periodic retention enforcement.** Currently only runs after a segment roll.
 - **`read_range` pagination.** Large replay reads return `Vec<LogEntry>`. A streaming variant is planned.
 

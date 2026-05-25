@@ -1,7 +1,7 @@
 //! Retention conformance for [`EventLog`].
 //!
 //! Verifies that backends honour the `RetentionExpired` contract in
-//! [`port_out_event_log`]:
+//! [`timing_core::ports::outbound`]:
 //!
 //! - `read_range(from, _)` with `from` below the earliest retained offset
 //!   returns [`StorageError::RetentionExpired`] (this check takes precedence,
@@ -20,7 +20,7 @@ use event_model::{
     Detection, DetectionId, DetectorId, OtkEvent, SensorData, SourceAttestation, TimebaseId,
     TimestampingMethod, TimingPointId,
 };
-use port_out_event_log::{EventLog, Offset, StorageError};
+use timing_core::ports::outbound::{EventLog, Offset, StorageError};
 
 fn det(seq: u64) -> OtkEvent {
     OtkEvent::Detection(Detection {

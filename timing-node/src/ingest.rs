@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use port_in_ingest::{EventIngestPort, IngestError, IngestSession};
+use timing_core::ports::inbound::{EventIngestPort, IngestError, IngestSession};
+use timing_core::EventIngestService;
 use tracing::{debug, error, info, Instrument};
 
 use crate::metrics::Metrics;
-use crate::pipeline::NodePipeline;
 use crate::trace_context::apply_traceparent;
 
 /// RAII guard that decrements `ingest_sessions_active` for a listener when
@@ -31,7 +31,7 @@ impl Drop for ActiveSessionGuard {
 pub async fn run_listener(
     port: Box<dyn EventIngestPort>,
     listener_id: String,
-    pipeline: Arc<NodePipeline>,
+    service: Arc<EventIngestService>,
     metrics: Arc<Metrics>,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
@@ -42,7 +42,7 @@ pub async fn run_listener(
             result = port.accept() => {
                 match result {
                     Ok(session) => {
-                        let pipeline = Arc::clone(&pipeline);
+                        let service = Arc::clone(&service);
                         let metrics = Arc::clone(&metrics);
                         let listener_id = listener_id.clone();
                         metrics.ingest_sessions_total.incr(&[("listener_id", &listener_id)]);
@@ -66,7 +66,7 @@ pub async fn run_listener(
                             // abort-before-first-poll because it's owned by
                             // the future itself.
                             let _active = active;
-                            handle_session(session, pipeline).await;
+                            handle_session(session, service).await;
                         });
                     }
                     Err(IngestError::Closed) => {
@@ -138,7 +138,7 @@ pub async fn run_listener(
     }
 }
 
-async fn handle_session(mut session: Box<dyn IngestSession>, pipeline: Arc<NodePipeline>) {
+async fn handle_session(mut session: Box<dyn IngestSession>, service: Arc<EventIngestService>) {
     let producer_id = session.producer_id().to_string();
     let peer_addr = session.peer_addr().to_string();
     info!(producer = %producer_id, peer = %peer_addr, "session started");
@@ -168,9 +168,9 @@ async fn handle_session(mut session: Box<dyn IngestSession>, pipeline: Arc<NodeP
                 }
                 let producer_id_for_async = producer_id.clone();
                 let peer_addr_for_async = peer_addr.clone();
-                let pipeline_for_async = Arc::clone(&pipeline);
+                let service_for_async = Arc::clone(&service);
                 let result = async move {
-                    pipeline_for_async
+                    service_for_async
                         .append_event(&producer_id_for_async, incoming.event)
                         .await
                         .map_err(|e| (peer_addr_for_async, e))

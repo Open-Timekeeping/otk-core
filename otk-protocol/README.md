@@ -28,8 +28,8 @@ otk-protocol/               wire DTOs (OtkEnvelope, MessageType, ...)   <-- this
 frame-codec/                encode/decode envelopes into byte frames
 ingest-protocol/            server-side handshake + dispatch state machine
 timing-core/                domain engine
-port-in-ingest/             typed ingest port contract
-adapter-ingest-tcp/         decodes frames -> OtkEvent, implements port-in-ingest
+timing-core/ports/inbound/             typed ingest port contract
+adapter-ingest-tcp/         decodes frames -> OtkEvent, implements timing_core::ports::inbound::EventIngestPort
 adapter-ingest-unix-socket/ same, over AF_UNIX
 otk-sdk/                    producer feature: encodes OtkEvent -> otk-protocol
 ```

@@ -28,10 +28,10 @@ use ingest_protocol::AllowAll;
 use otk_protocol::{
     ids::ProducerId, Connect, ConnectAck, MessageType, OtkEnvelope, PROTOCOL_VERSION,
 };
-use port_in_ingest::EventIngestPort;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, RootCertStore};
 use tempfile::TempDir;
+use timing_core::ports::inbound::EventIngestPort;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;

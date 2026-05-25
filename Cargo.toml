@@ -3,8 +3,6 @@ members  = [
     "event-model",
     "otk-protocol",
     "timing-core",
-    "port-in-ingest",
-    "port-out-event-log",
     "frame-codec",
     "ingest-protocol",
     "otk-contracts",
@@ -97,6 +95,4 @@ otk-protocol               = { path = "otk-protocol" }
 # "producer" / both. `otk-sdk` itself ships with `default = ["client"]`,
 # which the workspace pin would silently include otherwise.
 otk-sdk                    = { path = "otk-sdk", default-features = false }
-port-in-ingest             = { path = "port-in-ingest" }
-port-out-event-log         = { path = "port-out-event-log" }
 timing-core                = { path = "timing-core" }

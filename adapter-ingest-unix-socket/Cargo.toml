@@ -3,10 +3,12 @@ name        = "adapter-ingest-unix-socket"
 version     = "0.1.0"
 edition     = "2021"
 license     = "Apache-2.0"
-description = "Unix-socket ingest adapter for OTK. Implements port-in-ingest over a local AF_UNIX listener."
+description = "Unix-socket ingest adapter for OTK. Implements the EventIngestPort inbound port (defined in timing-core::ports::inbound) over a local AF_UNIX listener."
 
 [dependencies]
-port-in-ingest  = { workspace = true }
+# See adapter-ingest-tcp/Cargo.toml for the rationale on depending on
+# `timing-core` and the clippy fence that keeps this dep narrow.
+timing-core     = { workspace = true }
 otk-protocol    = { workspace = true }
 event-model     = { workspace = true }
 frame-codec     = { workspace = true }

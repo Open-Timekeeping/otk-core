@@ -1,9 +1,9 @@
 //! Segment-file event log backend for Open Timekeeping.
 //!
-//! This crate implements [`port_out_event_log::EventLog`] using an append-only
+//! This crate implements [`timing_core::ports::outbound::EventLog`] using an append-only
 //! sequence of fixed-budget segment files on local disk. It is the only
 //! storage backend Open Timekeeping ships for v0; alternative backends can be
-//! added later behind the same [`port_out_event_log::EventLog`] contract.
+//! added later behind the same [`timing_core::ports::outbound::EventLog`] contract.
 //!
 //! # How it works
 //!
@@ -25,10 +25,10 @@
 //!
 //! ```no_run
 //! use adapter_event_log_segment::{SegmentLog, SegmentLogConfig};
-//! use port_out_event_log::{EventLog, RetentionPolicy};
+//! use timing_core::ports::outbound::{EventLog, RetentionPolicy};
 //! use std::path::PathBuf;
 //!
-//! # async fn example() -> Result<(), port_out_event_log::StorageError> {
+//! # async fn example() -> Result<(), timing_core::ports::outbound::StorageError> {
 //! let config = SegmentLogConfig {
 //!     dir: PathBuf::from("/var/lib/otk-node/log"),
 //!     retention: RetentionPolicy::TimeBased { max_age_secs: 86400 },
@@ -45,7 +45,7 @@
 //!   per-`append` `sync_all` call, relying on OS write-back instead. There is
 //!   no background flusher yet, so `flush_interval_ms > 0` trades durability
 //!   for throughput without a timer-based safety net.
-//! - Time-based index (deferred until `port_out_event_log` gains a timestamp-range
+//! - Time-based index (deferred until `timing_core::ports::outbound` gains a timestamp-range
 //!   read variant).
 //! - Periodic retention enforcement (currently runs only after segment roll).
 

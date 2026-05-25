@@ -1,6 +1,6 @@
 //! Unix-socket ingest adapter for OTK.
 //!
-//! Implements `port-in-ingest` over a local AF_UNIX listener. Same protocol
+//! Implements `timing_core::ports::inbound` over a local AF_UNIX listener. Same protocol
 //! and framing as TCP — bytes pumped through [`frame_codec::StreamFrameDecoder`]
 //! and dispatched by [`ingest_protocol::PostHandshakeProcessor`] — only the
 //! transport differs.

@@ -37,7 +37,7 @@ The suite is anchored on an in-crate [`MemLog`](./src/mem_log.rs) reference `Eve
 
 ## Dependencies
 
-**Depends on:** [`spec`](../spec) (normative), and the this workspace member crates `event-model`, `otk-protocol`, `port-out-event-log`, `frame-codec`, `ingest-protocol`, `otk-contracts`. By design, this crate does **not** depend on any concrete adapter implementation (`adapter-ingest-tcp`, `adapter-event-log-segment`, etc.) so adding or removing adapters can't perturb the harness.
+**Depends on:** [`spec`](../spec) (normative), and the this workspace member crates `event-model`, `otk-protocol`, `timing_core::ports::outbound`, `frame-codec`, `ingest-protocol`, `otk-contracts`. By design, this crate does **not** depend on any concrete adapter implementation (`adapter-ingest-tcp`, `adapter-event-log-segment`, etc.) so adding or removing adapters can't perturb the harness.
 
 **Commonly depended on by:** every adapter, every timebase, every storage backend, [`timing-node`](../timing-node), reference firmware, third-party implementations.
 

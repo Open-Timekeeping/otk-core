@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use port_out_event_log::{LogEntry, LogSubscription, Offset, StorageError};
+use timing_core::ports::outbound::{LogEntry, LogSubscription, Offset, StorageError};
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 use tokio::sync::Notify;

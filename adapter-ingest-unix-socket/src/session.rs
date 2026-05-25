@@ -8,7 +8,7 @@ use ingest_protocol::{
     InboundAction, PostHandshakeProcessor, ProtocolError,
 };
 use otk_protocol::OtkEnvelope;
-use port_in_ingest::{IncomingEvent, IngestError, IngestSession};
+use timing_core::ports::inbound::{IncomingEvent, IngestError, IngestSession};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use event_model::OtkEvent;
-use port_out_event_log::{EventLog, LogEntry, LogSubscription, Offset, StorageError};
+use timing_core::ports::outbound::{EventLog, LogEntry, LogSubscription, Offset, StorageError};
 use tokio::sync::Notify;
 
 struct Inner {

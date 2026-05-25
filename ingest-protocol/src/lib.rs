@@ -8,7 +8,7 @@
 //! Per-transport ingest adapters (`adapter-ingest-tcp`,
 //! `adapter-ingest-unix-socket`, …) are reduced to: socket lifecycle, byte I/O,
 //! frame-codec wiring, and translating the actions this crate yields into
-//! [`port_in_ingest::IngestSession`] behavior. None of them re-implement the
+//! [`timing_core::ports::inbound::IngestSession`] behavior. None of them re-implement the
 //! handshake or message-type dispatch.
 //!
 //! # Lifecycle
@@ -32,7 +32,7 @@
 //! it closes the session.
 //!
 //! [`OtkEnvelope`]: otk_protocol::OtkEnvelope
-//! [`port_in_ingest::IngestSession`]: https://docs.rs/port-in-ingest
+//! [`timing_core::ports::inbound::IngestSession`]: https://docs.rs/timing-core
 
 pub mod error;
 pub mod handshake;

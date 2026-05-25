@@ -6,9 +6,9 @@
 //! This exercises the full stack: producer connects over TCP, sends
 //! detections, runtime persists to the segment log (capturing the
 //! producer_id added in PR #11), runtime shuts down, fresh runtime
-//! opens the same log, [`timing_node::sequence_gate::seed_from_log_box`]
-//! rebuilds the high-water marks during `Node::new`, and the gate
-//! rejects replays as soon as the new listener is reachable.
+//! opens the same log, [`timing_core::seed_from_log_box`] rebuilds the
+//! high-water marks during `Node::new`, and the gate rejects replays
+//! as soon as the new listener is reachable.
 
 use std::path::{Path, PathBuf};
 
@@ -20,7 +20,7 @@ use event_model::{
 use otk_protocol::{
     ids::ProducerId, Connect, ConnectAck, MessageType, OtkEnvelope, PROTOCOL_VERSION,
 };
-use port_out_event_log::{EventLog, Offset};
+use timing_core::ports::outbound::{EventLog, Offset};
 use timing_node::{ListenerConfig, Node, NodeConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

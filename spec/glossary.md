@@ -58,7 +58,7 @@ The OTK message envelope: versioning, message types, source identity, sequence n
 How OTK messages are encoded into byte frames and decoded back. Provides length-prefixed stream framing for reliable transports (TCP, Unix socket) and COBS + CRC-16/CCITT-FALSE serial framing for unreliable byte streams (UART, RS-232, RS-485). `no_std` + `alloc`; shared between server and firmware.
 
 **Transport Binding** (per-transport adapter repos)
-How OTK frames move over a specific physical or logical link. Each binding lives as a per-transport adapter crate: [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket), and future serial / USB-CDC / RS-485 / etc. The common abstraction every binding implements is [`port-in-ingest`](../port-in-ingest).
+How OTK frames move over a specific physical or logical link. Each binding lives as a per-transport adapter crate: [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket), and future serial / USB-CDC / RS-485 / etc. The common abstraction every binding implements is [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) in `timing_core::ports::inbound`.
 
 **OTK frame**
 A single encoded OTK message ready to traverse a transport binding, including whatever delimiter/framing/CRC the binding requires.

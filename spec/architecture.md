@@ -103,19 +103,24 @@ The layering matters:
 
 ## The contracts every implementation meets
 
-Open Timekeeping is held together by a small set of normative contracts. Most live as crates in this workspace; the per-transport-binding contract is shared by every transport adapter through [`port-in-ingest`](../port-in-ingest).
+Open Timekeeping is held together by a small set of normative contracts. They live as crates in this workspace, plus a set of port traits inside [`timing-core`](../timing-core) that adapters and the API layer compile against.
 
 1. **`event-model`**, canonical event/data shapes. Every event, every identifier, every provenance block in the system is defined here. No transport assumptions; `no_std` + `alloc`.
 2. **`otk-protocol`** (crate `otk-protocol`), the OTK message envelope: versioning, message types, source identity, sequence numbers, acknowledgements where applicable, error messages, and compatibility rules. Not bound to any single transport.
 3. **`frame-codec`**, encode/decode of OTK messages into byte frames (and back). Provides both length-prefixed stream framing (reliable transports: TCP, Unix socket) and COBS + CRC-16/CCITT-FALSE serial framing (unreliable byte streams: UART, RS-232, RS-485). `no_std` + `alloc`.
-4. **`port-in-ingest`**, the common abstraction every transport-binding ingest adapter implements: listener accept loop, session lifecycle, error vocabulary.
-5. **`ingest-protocol`**, the transport-agnostic server-side state machine consumed by ingest adapters: handshake negotiation (with pluggable authoriser), post-handshake envelope validation and message-type dispatch.
-6. **`otk-contracts`**, the universal trait contracts a third-party implementer compiles against: `DetectorAdapter` and `Timebase`. Dependency-light (no `tokio`, no `minicbor` direct dep) so a vendor adapter can target this surface without inheriting the SDK's transport stack.
+4. **`ingest-protocol`**, the transport-agnostic server-side state machine consumed by ingest adapters: handshake negotiation (with pluggable authoriser), post-handshake envelope validation and message-type dispatch.
+5. **`otk-contracts`**, the universal trait contracts a third-party implementer of a *producer-side* role compiles against: `DetectorAdapter` and `Timebase`. Dependency-light (no `tokio`, no `minicbor` direct dep) so a vendor adapter can target this surface without inheriting the SDK's transport stack.
 
-Supporting contracts:
+Server-side port traits, all inside [`timing-core`](../timing-core):
 
-- **`port-out-event-log`** sits between the runtime node and its persistence backends. The v0 backend is [`adapter-event-log-segment`](../adapter-event-log-segment); alternatives plug in behind the same trait.
-- **`plugin-api`** is reserved for in-process plugin loading. Not yet specified; see [`open-questions.md`](open-questions.md).
+- **`timing_core::ports::inbound::EventIngestPort`**, the common abstraction every transport-binding ingest adapter implements (listener accept loop, session lifecycle, error vocabulary). Implementers: `adapter-ingest-tcp`, `adapter-ingest-unix-socket`.
+- **`timing_core::ports::inbound::EventQueryPort`**, the API-shaped query surface (`latest_offset`, `read_events`, `subscribe_events`) the REST/SSE layer depends on. Implemented by `timing-core::services::EventIngestService`; alternative implementers (an offline analyzer, a replay tool) can be substituted at the composition root.
+- **`timing_core::ports::outbound::EventLog`**, the persistence boundary. The v0 backend is [`adapter-event-log-segment`](../adapter-event-log-segment); alternatives plug in behind the same trait.
+- **`timing_core::ports::outbound::IngestMetrics`**, the counter-emission boundary for the application service. v0 implementer: the Prometheus text-format `Metrics` type in `timing-node`. `NoopIngestMetrics` ships in `timing-core` for tests and metrics-less embedders.
+
+**Boundary enforcement.** Adapters and conformance crates depend on `timing-core` as a whole, but a per-crate `clippy.toml` denies imports of `timing_core::domain::*` and `timing_core::services::*`. The runtime composition root (`timing-node`) is the only crate that touches every layer (domain + services + ports). When the port traits lived in their own crates (`port-in-ingest`, `port-in-query`, `port-out-event-log`) the equivalent fence was enforced by Cargo's dependency graph; folding them into `timing-core` reduced ceremony at the cost of trading dep-graph enforcement for the convention-enforced clippy fence.
+
+**`plugin-api`** is reserved for in-process plugin loading. Not yet specified; see [`open-questions.md`](open-questions.md).
 
 If an implementation satisfies the contracts that apply to its role and passes the corresponding [`conformance`](../conformance) suite, it is Open Timekeeping compatible.
 
@@ -129,13 +134,11 @@ Most contracts live as crates in this single Cargo workspace.
 | Crate | Role boundary |
 |---|---|
 | `event-model` | Canonical event types and identifiers. No transport assumptions. `no_std` + `alloc`. |
-| `protocol` (crate `otk-protocol`) | OTK message envelope: versioning, sequencing, acks, errors. Transport-agnostic. |
+| `otk-protocol` | OTK message envelope: versioning, sequencing, acks, errors. Transport-agnostic. |
 | `frame-codec` | Encode/decode of OTK messages into byte frames. Stream framing (length-prefix) and serial framing (COBS + CRC-16/CCITT-FALSE). `no_std` + `alloc`. |
-| `port-in-ingest` | Inbound port: every transport-binding ingest adapter implements this trait. |
 | `ingest-protocol` | Transport-agnostic server-side state machine: handshake negotiation, envelope validation, message-type dispatch. Pluggable `ConnectAuthoriser` for runtime auth. |
-| `otk-contracts` | Universal trait contracts: `DetectorAdapter`, `Timebase`. Dependency-light surface for third-party implementers. |
-| `port-out-event-log` | Outbound port: every storage backend implements this trait. |
-| `timing-core` | Timing-domain engine: detections → crossings. Pure library; no IO. |
+| `otk-contracts` | Universal trait contracts for producer-side roles: `DetectorAdapter`, `Timebase`. Dependency-light surface for third-party implementers. |
+| `timing-core` | The hexagon. Three sibling modules: **`domain/`** (`Crossing`, `CrossingProcessor`, `SequenceGate`, `ProcessorConfig`), **`ports/inbound/`** (`EventIngestPort`, `EventQueryPort`) + **`ports/outbound/`** (`EventLog`, `IngestMetrics`) — the typed boundary adapters and the API layer compile against, **`services/`** (`EventIngestService`, which implements `EventQueryPort` and takes the outbound ports as constructor arguments). Adapter crates and `conformance` depend on `timing-core` for the port types only; a per-crate `clippy.toml` denies reaching into `domain` or `services`. The composition root (`timing-node`) is the only crate that touches every layer. |
 
 ### Adapter and runtime crates
 
@@ -144,10 +147,10 @@ Most contracts live as crates in this single Cargo workspace.
 | Standard / conceptual model | [`spec`](../spec) | What Open Timekeeping means. (Docs, not a Rust crate.) |
 | TCP ingest adapter | [`adapter-ingest-tcp`](../adapter-ingest-tcp) | OTK frames over TCP. |
 | Unix-socket ingest adapter | [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket) | OTK frames over AF_UNIX (same-host producer/runtime). |
-| Segment-file event log | [`adapter-event-log-segment`](../adapter-event-log-segment) | The v0 storage backend; implements `port-out-event-log`. |
+| Segment-file event log | [`adapter-event-log-segment`](../adapter-event-log-segment) | The v0 storage backend; implements `timing_core::ports::outbound::EventLog`. |
 | Producer/consumer SDK | [`otk-sdk`](../otk-sdk) | Producer-side `connect`/`send_event` helpers, consumer HTTP/SSE client, builders. Re-exports `otk-contracts`. |
 | Simulated producer | [`producer-simulated`](../producer-simulated) | `otk-simulator` binary: synthetic detector events. |
-| Runtime node | [`timing-node`](../timing-node) | The deployable server (`otk-node` binary): hosts ingest listeners, sequence gate, crossing processor, REST/SSE API, `/healthz` + `/readyz` + `/metrics`. |
+| Runtime node | [`timing-node`](../timing-node) | The deployable server (`otk-node` binary) and composition root. Builds the storage and ingest adapters, constructs `timing-core`'s `EventIngestService` with those adapters injected, supervises listeners, and hosts the REST/SSE API (`/api/v1/...`) plus operational endpoints (`/healthz`, `/readyz`, `/metrics`). Owns operational concerns the domain does not: shared-secret auth, config hot-reload, Prometheus exposition, trace-context propagation. |
 | Conformance | [`conformance`](../conformance), [`conformance-fixtures`](../conformance-fixtures) | Verifies any implementation. |
 
 ### Planned / not yet shipped
@@ -158,9 +161,9 @@ Most contracts live as crates in this single Cargo workspace.
 | Live-timing and diagnostics apps | Planned. |
 | Embedded toolkit (RP2040 / STM32 targets, HAL, native detector firmware crates) | Planned. The protocol-layer crates firmware would consume (`event-model`, `otk-protocol`, `frame-codec`) already ship as `no_std` + `alloc`, so a `target-*` firmware crate is the only missing piece. |
 | Plugin loading (`plugin-api`) | Open question; see [`open-questions.md`](open-questions.md). |
-| Additional storage backends (embedded SQL, server SQL, object-store-tiered) | Plug behind `port-out-event-log` when there's a concrete need. |
+| Additional storage backends (embedded SQL, server SQL, object-store-tiered) | Plug behind `timing_core::ports::outbound::EventLog` when there's a concrete need. |
 
-`timing-core` is a *library*. `timing-node` is the *binary*. Do not conflate them. The producer-side `Producer` connection helper in `otk-sdk` is a *convenience library*; producers may use it, or build directly on `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
+`timing-core` is the *domain library + application service*. `timing-node` is the *binary + composition root*. Do not conflate them: `timing-core` owns what an OTK runtime *does* (group detections into crossings, gate by sequence number, persist and serve events through injected ports); `timing-node` owns how a deployment *boots* (load config, build adapters, supervise listeners, expose HTTP). An alternative composition root (e.g. an offline analyzer, a replay tool, an embedded variant) builds its own adapters and constructs `EventIngestService` directly without depending on `timing-node`. The producer-side `Producer` connection helper in `otk-sdk` is a *convenience library*; producers may use it, or build directly on `event-model` + `otk-protocol` + `frame-codec` + a transport binding.
 
 ---
 
@@ -276,7 +279,7 @@ Open Timekeeping is designed so that a temporary disconnection at any boundary i
 A detector adapter that disconnects from a runtime node and later reconnects must rejoin, re-register, and resume from a known sequence number with no gaps and no duplicates. The adapter is responsible for buffering its own output locally for the duration of the outage. Firmware, external adapter processes, and plugin-loaded adapters all meet this contract. Sequence numbers are strictly monotonic per detector and persist across reconnects. This is the analogue of a detector device storing passings locally while the upstream link is down.
 
 **Consumer-side resume (timing-node to downstream consumer).**
-A downstream consumer (live timing app, diagnostics app, external integrator, federated node) that disconnects from a runtime node and later reconnects must be able to read every event the node accepted during the outage, in order, with no gaps and no duplicates, provided the events are still within the configured retention window. The runtime node is responsible for buffering on the consumer's behalf; consumers do not buffer for each other. The durable event log lives behind [`port-out-event-log`](../port-out-event-log) (in v0, [`adapter-event-log-segment`](../adapter-event-log-segment)). When a consumer requests a range that has fallen out of retention, the node returns a structured `retention_expired` error rather than silent gaps. This is the analogue of a central timing server holding all received events for the scoring application to pick up when it reconnects.
+A downstream consumer (live timing app, diagnostics app, external integrator, federated node) that disconnects from a runtime node and later reconnects must be able to read every event the node accepted during the outage, in order, with no gaps and no duplicates, provided the events are still within the configured retention window. The runtime node is responsible for buffering on the consumer's behalf; consumers do not buffer for each other. The durable event log lives behind the [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) outbound port in `timing-core` (in v0, [`adapter-event-log-segment`](../adapter-event-log-segment) is the only implementer). When a consumer requests a range that has fallen out of retention, the node returns a structured `retention_expired` error rather than silent gaps. This is the analogue of a central timing server holding all received events for the scoring application to pick up when it reconnects.
 
 **What this means for the adapter role.**
 Adapters are responsible for the producer-to-node link. They do not buffer on behalf of downstream consumers. A detector adapter that has delivered an event to the runtime node has done its job; the runtime node owns durability from that point forward.

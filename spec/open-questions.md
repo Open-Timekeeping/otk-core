@@ -33,7 +33,7 @@ Open:
 - **WebSocket as a separate binding** for browser-debuggable producers, or out of scope at the producer layer entirely.
 
 Resolved:
-- Common abstraction shape: [`port-in-ingest`](../port-in-ingest)'s `EventIngestPort` + `IngestSession` traits. Handshake and post-handshake dispatch reusable via [`ingest-protocol`](../ingest-protocol).
+- Common abstraction shape: `timing_core::ports::inbound`'s `EventIngestPort` + `IngestSession` traits. Handshake and post-handshake dispatch reusable via [`ingest-protocol`](../ingest-protocol).
 
 ## Event model, `event-model`
 
@@ -54,7 +54,7 @@ Resolved:
 
 Resolved:
 - Trait shape: async `next_event` returning a small `AdapterEvent` / `TimebaseEvent` enum. The first event after `start` must be `Metadata`. (Conformance asserts the invariant.)
-- Producer-side reconnect resume: monotonic per-`(producer_id, detector_id)` sequence numbers; runtime side is authoritative via `SequenceGate`. Restart resume now also survives **runtime** restarts: `producer_id` is persisted alongside each `LogEntry` (segment format v2), and `Node::new` seeds the gate's high-water marks from a full log scan before any listener accepts. A producer that reconnects with the same `producer_id` after a node restart cannot replay an acknowledged sequence. (Implementation: `timing_node::sequence_gate::seed_from_log`.)
+- Producer-side reconnect resume: monotonic per-`(producer_id, detector_id)` sequence numbers; runtime side is authoritative via `SequenceGate`. Restart resume now also survives **runtime** restarts: `producer_id` is persisted alongside each `LogEntry` (segment format v2), and `Node::new` seeds the gate's high-water marks from a full log scan before any listener accepts. A producer that reconnects with the same `producer_id` after a node restart cannot replay an acknowledged sequence. (Implementation: `timing_core::seed_from_log`, as of M11 — the gate moved out of `timing-node` into the domain core when application services were lifted into `timing-core`.)
 - Timebase contract: lives alongside `DetectorAdapter` in `otk-contracts`. (`timebase-api` as a separate repo was deleted; timebases are producers using `otk-sdk`.)
 
 ## Timebase profiles
@@ -86,19 +86,19 @@ Resolved:
 - Stream naming convention: `StreamKind` in `event-model` carries the semantic level (`Raw`, `Detections`, `Processed`); concrete `StreamId` is a configurable per-deployment value.
 - **Sequence-gate restart persistence.** High-water marks are rebuilt from the segment log on `Node::new` (cross-ref the detector-adapter Resolved entry above; segment format v2 carries `producer_id` per entry, which is the gate's keyspace).
 - **W3C `traceparent` propagation through `OtkEnvelope`.** Optional `traceparent: Option<String>` field at CBOR index 7 on the envelope; producers using `otk-sdk` auto-extract from the current `tracing::Span` via `tracing-opentelemetry`; the runtime parents each per-event `tracing::Span` on the producer's remote span context. With no OTel SDK configured at runtime, the field is absent and the per-event span becomes a local root, so the default ops experience is unchanged.
-- **Pipeline atomicity: storage append vs `CrossingProcessor` state.** The processor splits into `peek_detection` (pure, returns the crossings a commit would emit) and `commit_detection` (mutates and returns the same). `NodePipeline::append_event` peeks before append and commits only on success, so a storage failure can no longer leave the processor's grouping window advanced past what was persisted.
+- **Pipeline atomicity: storage append vs `CrossingProcessor` state.** The processor splits into `peek_detection` (pure, returns the crossings a commit would emit) and `commit_detection` (mutates and returns the same). `EventIngestService::append_event` (in `timing-core`) peeks before append and commits only on success, so a storage failure can no longer leave the processor's grouping window advanced past what was persisted.
 - **TLS for the TCP transport.** Optional rustls-backed TLS on any `tcp` listener via `[listeners.tls]` (server-auth-only by default; mTLS when `client_ca` is set). `adapter-ingest-tcp` and `otk-sdk` both grow a `tls` (server) / `producer-tls` (client) feature pulling rustls + tokio-rustls + rustls-pemfile. PEM material is loaded once at `Node::new` / `Producer::connect`; cert rotation requires a restart.
 - **Configuration format and hot-reload policy.** TOML for the on-disk config. Cross-platform file watcher (`notify` + `notify-debouncer-mini`) reloads `auth.producer_tokens` and `auth.api_tokens` atomically via `ArcSwap` without dropping active connections. Other fields (`node_id`, `storage_dir`, `listeners`, `api_addr`, `api.allowed_origins`, TLS material) require a restart; the watcher emits a `warn!` per restart-required field that changed so the operator knows the edit didn't take effect for those. Watcher is only enabled when the node was started with `--config PATH`; in-process embedders skip it and rotate tokens directly via the public `AuthState` handle.
 
-## Storage, `port-out-event-log` and `adapter-event-log-segment`
+## Storage, `timing_core::ports::outbound` and `adapter-event-log-segment`
 
-The v0 backend is a custom segment-file log ([`adapter-event-log-segment`](../adapter-event-log-segment)). Storage stays pluggable behind [`port-out-event-log`](../port-out-event-log); alternative backends (embedded SQL, server SQL, object-store-tiered) can be added behind the same trait when there is a concrete need.
+The v0 backend is a custom segment-file log ([`adapter-event-log-segment`](../adapter-event-log-segment)). Storage stays pluggable behind `timing_core::ports::outbound`; alternative backends (embedded SQL, server SQL, object-store-tiered) can be added behind the same trait when there is a concrete need.
 
 - **Background fsync task.** Per-`append` `sync_all()` is the default. Setting `flush_interval_ms > 0` skips fsync and currently has no timer-based safety net; a background flusher is planned.
-- **Time index.** Index by `appended_at_ns` for timestamp-range reads. Deferred until `port-out-event-log` adds a timestamp-range read variant.
+- **Time index.** Index by `appended_at_ns` for timestamp-range reads. Deferred until `timing_core::ports::outbound` adds a timestamp-range read variant.
 - **Periodic retention enforcement.** Currently only runs after a segment roll; long-lived runtime with no rolls drifts past its time-based retention budget.
 - **`read_range` streaming variant.** Large replay reads return `Vec<LogEntry>`; a streaming/paginated variant is planned.
-- **Actor-vs-mutex for the runtime's storage path.** The current `NodePipeline` uses `tokio::sync::Mutex<Box<dyn EventLog>>` with a documented lock discipline (the synchronous `CrossingProcessor` mutex is never held across an `.await`). A single-owner actor task could outperform the mutex under high-rate ingest; deferred until benchmarks justify it.
+- **Actor-vs-mutex for the runtime's storage path.** The current `EventIngestService` (in `timing-core`) uses `tokio::sync::Mutex<Box<dyn EventLog>>` with a documented lock discipline (the synchronous `CrossingProcessor` mutex is never held across an `.await`). A single-owner actor task could outperform the mutex under high-rate ingest; deferred until benchmarks justify it.
 
 Resolved:
 - Segment file format (v2): 24-byte header (magic `OTKS`, version byte, flags, base_offset, created_at_ns); length-prefixed records carrying `offset`, `appended_at_ns`, `producer_id_len + producer_id_utf8` (≤ 256 B), `event_len + event_cbor`, with a CRC32 over everything before the CRC field; closed segments end with a 4-byte zero sentinel. Companion `.idx` offset index written atomically on segment close. The v1 → v2 bump added the `producer_id` slot per record so the runtime's sequence gate can be rebuilt from the log on restart; v1 segment files are explicitly rejected at header validation.

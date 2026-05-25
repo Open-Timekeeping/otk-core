@@ -10,8 +10,8 @@ dependencies = [
  "crc32fast",
  "event-model",
  "minicbor",
- "port-out-event-log",
  "tempfile",
+ "timing-core",
  "tokio",
 ]
 
@@ -26,12 +26,12 @@ dependencies = [
  "minicbor",
  "otk-protocol",
  "otk-sdk",
- "port-in-ingest",
  "rcgen",
  "rustls",
  "rustls-pemfile",
  "tempfile",
  "thiserror",
+ "timing-core",
  "tokio",
  "tokio-rustls",
 ]
@@ -46,8 +46,8 @@ dependencies = [
  "ingest-protocol",
  "minicbor",
  "otk-protocol",
- "port-in-ingest",
  "tempfile",
+ "timing-core",
  "tokio",
 ]
 
@@ -240,7 +240,7 @@ dependencies = [
  "minicbor",
  "otk-contracts",
  "otk-protocol",
- "port-out-event-log",
+ "timing-core",
  "tokio",
 ]
 
@@ -1025,24 +1025,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "port-in-ingest"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "event-model",
- "thiserror",
-]
-
-[[package]]
-name = "port-out-event-log"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "event-model",
- "tokio",
-]
-
-[[package]]
 name = "potential_utf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1611,7 +1593,13 @@ checksum = "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
 name = "timing-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "event-model",
+ "futures-util",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -1623,7 +1611,6 @@ dependencies = [
  "adapter-ingest-tcp",
  "adapter-ingest-unix-socket",
  "arc-swap",
- "async-trait",
  "axum",
  "event-model",
  "futures-util",
@@ -1633,8 +1620,6 @@ dependencies = [
  "notify-debouncer-mini",
  "opentelemetry",
  "otk-protocol",
- "port-in-ingest",
- "port-out-event-log",
  "reqwest",
  "serde",
  "serde_json",

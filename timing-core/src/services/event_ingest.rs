@@ -1,48 +1,39 @@
+//! Application service that drives end-to-end event ingestion.
+//!
+//! This is the OTK runtime's domain "use case" expressed in code: a
+//! producer-supplied event arrives, the service applies sequence-gate
+//! policy and derives any crossings, persists the result through the
+//! injected event-log port, and exposes a read-only query view of what
+//! it has persisted via the [`EventQueryPort`] inbound port.
+//!
+//! Hexagonal placement:
+//!
+//! - **Inbound (driving) port implemented**: [`EventQueryPort`] from
+//!   [`crate::ports::inbound`]. The REST/SSE API in `timing-node` depends
+//!   on the trait, not on `EventIngestService` itself.
+//! - **Outbound (driven) ports consumed**: [`EventLog`] (storage) and
+//!   [`IngestMetrics`] (telemetry), both from [`crate::ports::outbound`].
+//!   Both are injected as constructor arguments by the composition root.
+//! - **Domain policy owned**: [`crate::SequenceGate`] for sequence-number
+//!   monotonicity and [`CrossingProcessor`] for detection-to-crossing
+//!   grouping.
+//!
+//! `timing-node` builds the adapters (segment-log backend, Prometheus
+//! `Metrics`) and hands them to [`EventIngestService::new`]. The runtime
+//! has no other entry point into the ingest pipeline.
+
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use event_model::{CrossingEvent, CrossingId, OtkEvent};
 use futures_util::stream;
-use port_out_event_log::{EventLog, Offset, StorageError};
-use timing_core::{Crossing, CrossingProcessor, ProcessorConfig};
 use tracing::{debug, info, warn};
 
-use crate::metrics::Metrics;
-use crate::ports::{EventEntry, EventPage, EventQueryPort, EventStream, QueryError};
-use crate::sequence_gate::{GateDecision, SequenceGate};
+use crate::domain::{Crossing, CrossingProcessor, GateDecision, ProcessorConfig, SequenceGate};
+use crate::ports::inbound::{EventEntry, EventPage, EventQueryPort, EventStream, QueryError};
+use crate::ports::outbound::{EventLog, IngestMetrics, Offset, StorageError};
 
-/// Shared node state: event log and crossing processor.
-///
-/// The log is held behind the `EventLog` trait, not a concrete backend; the
-/// composition root (`Node::new`) constructs the backend and injects it here.
-///
-/// # Concurrency discipline
-///
-/// Both halves are `Arc`-wrapped so connection handler tasks can hold clones.
-/// `EventLog::append` is async, so the log uses `tokio::sync::Mutex`.
-/// `CrossingProcessor` uses a `std::sync::Mutex` and is **never held across an
-/// `.await`** — `append_event` acquires it, runs `push_detection` (a fully
-/// synchronous call), drops it, and only then takes the async log lock.
-///
-/// The two mutexes are never held simultaneously, so deadlock is impossible
-/// regardless of lock ordering. The single bottleneck under high-rate ingest
-/// is the log mutex; replacing it with a single-owner actor task is a
-/// recognised future optimisation (see `spec/open-questions.md`).
-///
-/// # Batching
-///
-/// `append_event` builds a `[detection, ...crossings]` slice and submits it in
-/// one `EventLog::append` call. This halves lock acquisitions (and fsync, when
-/// per-append is on) whenever a detection produces crossings, and makes the
-/// detection + its derived crossings atomic at the storage layer.
-pub struct NodePipeline {
-    log: Arc<tokio::sync::Mutex<Box<dyn EventLog>>>,
-    processor: Arc<Mutex<CrossingProcessor>>,
-    gate: Arc<SequenceGate>,
-    metrics: Arc<Metrics>,
-}
-
-/// Outcome of a successful `append_event` call.
+/// Outcome of a successful [`EventIngestService::append_event`] call.
 #[derive(Debug, Clone, Copy)]
 pub enum AppendOutcome {
     /// Event (and any derived crossings) were persisted; `offset` is the offset
@@ -55,18 +46,63 @@ pub enum AppendOutcome {
     DroppedDuplicate,
 }
 
-impl NodePipeline {
-    /// Build a pipeline around an externally-constructed event log and a
-    /// pre-seeded sequence gate.
+/// End-to-end ingest application service.
+///
+/// Owns the event log (outbound port), the crossing engine (domain), and
+/// the sequence gate (domain policy). Exposes [`Self::append_event`] as
+/// the inbound entry point used by the transport-layer adapters, and
+/// implements [`EventQueryPort`] for the API layer.
+///
+/// # Concurrency discipline
+///
+/// Both stateful halves are wrapped behind a mutex so connection handler
+/// tasks can hold cheap `Arc` clones:
+///
+/// - `EventLog::append` is async, so the log uses `tokio::sync::Mutex`.
+/// - `CrossingProcessor` is fully synchronous, so it uses
+///   `std::sync::Mutex` and is **never held across an `.await`** :
+///   [`append_event`](Self::append_event) acquires it, runs
+///   `peek_detection` / `commit_detection`, drops it, and only then
+///   takes the async log lock.
+///
+/// The two mutexes are never held simultaneously, so deadlock is impossible
+/// regardless of lock ordering. The single bottleneck under high-rate ingest
+/// is the log mutex; replacing it with a single-owner actor task is a
+/// recognised future optimisation (tracked in `spec/open-questions.md`).
+///
+/// # Batching
+///
+/// [`append_event`](Self::append_event) builds a `[detection, ...crossings]`
+/// slice and submits it in one `EventLog::append` call. This halves lock
+/// acquisitions (and `fsync`, when per-append is on) whenever a detection
+/// produces crossings, and makes the detection + its derived crossings
+/// atomic at the storage layer.
+pub struct EventIngestService {
+    log: Arc<tokio::sync::Mutex<Box<dyn EventLog>>>,
+    processor: Arc<Mutex<CrossingProcessor>>,
+    gate: Arc<SequenceGate>,
+    metrics: Arc<dyn IngestMetrics>,
+}
+
+impl EventIngestService {
+    /// Build a service from an externally-constructed event log, a
+    /// pre-seeded sequence gate, and a metrics sink.
     ///
-    /// The log is type-erased so the runtime depends on the `EventLog` port,
-    /// not on any concrete storage backend. The gate is passed in (rather
-    /// than constructed here) so the composition root can call
-    /// [`crate::sequence_gate::seed_from_log_box`] against the opened log
-    /// before any ingest listener spawns, restoring per-producer high-water
-    /// marks across node restarts.
-    pub fn new(log: Box<dyn EventLog>, metrics: Arc<Metrics>, gate: Arc<SequenceGate>) -> Self {
-        let processor = CrossingProcessor::new(ProcessorConfig::default());
+    /// The log is type-erased so the service depends on the [`EventLog`]
+    /// port, not on any concrete storage backend. The gate is passed in
+    /// (rather than constructed here) so the composition root can call
+    /// [`crate::seed_from_log_box`] against the opened log
+    /// before any ingest listener spawns, restoring per-producer
+    /// high-water marks across node restarts. The metrics sink is held
+    /// behind [`IngestMetrics`] so the service has no dependency on any
+    /// particular exposition format.
+    pub fn new(
+        log: Box<dyn EventLog>,
+        processor_config: ProcessorConfig,
+        gate: Arc<SequenceGate>,
+        metrics: Arc<dyn IngestMetrics>,
+    ) -> Self {
+        let processor = CrossingProcessor::new(processor_config);
         Self {
             log: Arc::new(tokio::sync::Mutex::new(log)),
             processor: Arc::new(Mutex::new(processor)),
@@ -79,8 +115,9 @@ impl NodePipeline {
     ///
     /// `Detection` events are filtered through the sequence gate: duplicates
     /// are dropped silently (returns [`AppendOutcome::DroppedDuplicate`]),
-    /// gaps are logged + metered (in M7) but the event is still persisted.
-    /// Non-`Detection` events bypass the gate and are persisted unconditionally.
+    /// gaps are logged + metered but the event is still persisted.
+    /// Non-`Detection` events bypass the gate and are persisted
+    /// unconditionally.
     ///
     /// On `Detection` accept, the event is also pushed through the crossing
     /// processor; resulting crossings are appended as `OtkEvent::Crossing`.
@@ -119,10 +156,8 @@ impl NodePipeline {
                         got_seq = got,
                         "duplicate detection dropped"
                     );
-                    self.metrics.events_dropped_duplicates.incr(&[
-                        ("producer_id", producer_id),
-                        ("detector_id", det.detector_id.as_str()),
-                    ]);
+                    self.metrics
+                        .record_duplicate_dropped(producer_id, det.detector_id.as_str());
                     return Ok(AppendOutcome::DroppedDuplicate);
                 }
             }
@@ -196,22 +231,20 @@ impl NodePipeline {
                     gap = got - expected,
                     "sequence gap observed; event persisted"
                 );
-                self.metrics.sequence_gaps.incr(&[
-                    ("producer_id", producer_id),
-                    ("detector_id", det.detector_id.as_str()),
-                ]);
+                self.metrics
+                    .record_sequence_gap(producer_id, det.detector_id.as_str());
             }
         }
 
         // Detection is at index 0; everything after is a Crossing.
-        self.metrics
-            .events_appended
-            .incr(&[("producer_id", producer_id), ("event_kind", event_kind)]);
+        self.metrics.record_event_appended(producer_id, event_kind);
         for c in batch.iter().skip(1) {
             if let OtkEvent::Crossing(ce) = c {
+                // Derived crossings carry no producer; mark them so an
+                // operator can tell a producer-sourced event from one
+                // the timing-core synthesised.
                 self.metrics
-                    .events_appended
-                    .incr(&[("producer_id", "<timing-core>"), ("event_kind", "Crossing")]);
+                    .record_event_appended("<timing-core>", "Crossing");
                 info!(
                     crossing_id = %ce.crossing_id,
                     timing_point = %ce.timing_point_id,
@@ -269,7 +302,7 @@ fn map_storage_err(e: StorageError) -> QueryError {
 }
 
 #[async_trait]
-impl EventQueryPort for NodePipeline {
+impl EventQueryPort for EventIngestService {
     async fn latest_offset(&self) -> Result<Option<u64>, QueryError> {
         let mut log = self.log.lock().await;
         Ok(log
@@ -331,21 +364,18 @@ impl EventQueryPort for NodePipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use adapter_event_log_segment::{SegmentLog, SegmentLogConfig};
+    use crate::ports::outbound::NoopIngestMetrics;
+    use crate::testing::MockEventLog;
     use event_model::{
         Detection, DetectionId, DetectorId, SensorData, SourceAttestation, SubjectId, TimebaseId,
         TimestampingMethod, TimingPointId,
     };
 
-    async fn pipeline_in(tmp: &tempfile::TempDir) -> NodePipeline {
-        let log_config = SegmentLogConfig {
-            dir: tmp.path().to_path_buf(),
-            ..SegmentLogConfig::default()
-        };
-        let log = SegmentLog::open(log_config).await.expect("open log");
-        let metrics = Arc::new(Metrics::new());
+    fn service() -> EventIngestService {
+        let log = MockEventLog::new();
+        let metrics: Arc<dyn IngestMetrics> = Arc::new(NoopIngestMetrics);
         let gate = Arc::new(SequenceGate::new());
-        NodePipeline::new(Box::new(log), metrics, gate)
+        EventIngestService::new(Box::new(log), ProcessorConfig::default(), gate, metrics)
     }
 
     fn make_detection() -> Detection {
@@ -377,9 +407,8 @@ mod tests {
 
     #[tokio::test]
     async fn append_detection_increments_offset() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pipeline = pipeline_in(&tmp).await;
-        let outcome = pipeline
+        let svc = service();
+        let outcome = svc
             .append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
             .await
             .unwrap();
@@ -388,13 +417,11 @@ mod tests {
 
     #[tokio::test]
     async fn second_append_returns_next_offset() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pipeline = pipeline_in(&tmp).await;
-        pipeline
-            .append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
+        let svc = service();
+        svc.append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
             .await
             .unwrap();
-        let outcome = pipeline
+        let outcome = svc
             .append_event("p", OtkEvent::Detection(make_detection_with_seq(2)))
             .await
             .unwrap();
@@ -403,19 +430,17 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_sequence_is_dropped() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pipeline = pipeline_in(&tmp).await;
-        pipeline
-            .append_event("p", OtkEvent::Detection(make_detection_with_seq(5)))
+        let svc = service();
+        svc.append_event("p", OtkEvent::Detection(make_detection_with_seq(5)))
             .await
             .unwrap();
-        let outcome = pipeline
+        let outcome = svc
             .append_event("p", OtkEvent::Detection(make_detection_with_seq(5)))
             .await
             .unwrap();
         assert!(matches!(outcome, AppendOutcome::DroppedDuplicate));
         assert_eq!(
-            pipeline.latest_offset().await.unwrap(),
+            svc.latest_offset().await.unwrap(),
             Some(0),
             "log must not grow on duplicate"
         );
@@ -423,46 +448,39 @@ mod tests {
 
     #[tokio::test]
     async fn gap_is_accepted_and_log_grows() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pipeline = pipeline_in(&tmp).await;
-        pipeline
-            .append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
+        let svc = service();
+        svc.append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
             .await
             .unwrap();
         // Skip seq 2, jump to 5; gate logs the gap but accepts.
-        let outcome = pipeline
+        let outcome = svc
             .append_event("p", OtkEvent::Detection(make_detection_with_seq(5)))
             .await
             .unwrap();
         assert!(matches!(outcome, AppendOutcome::Appended(_)));
-        assert_eq!(pipeline.latest_offset().await.unwrap(), Some(1));
+        assert_eq!(svc.latest_offset().await.unwrap(), Some(1));
     }
 
     #[tokio::test]
     async fn latest_offset_reflects_appends() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pipeline = pipeline_in(&tmp).await;
-        assert!(pipeline.latest_offset().await.unwrap().is_none());
-        pipeline
-            .append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
+        let svc = service();
+        assert!(svc.latest_offset().await.unwrap().is_none());
+        svc.append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
             .await
             .unwrap();
-        assert_eq!(pipeline.latest_offset().await.unwrap(), Some(0));
+        assert_eq!(svc.latest_offset().await.unwrap(), Some(0));
     }
 
     #[tokio::test]
     async fn read_events_returns_appended() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pipeline = pipeline_in(&tmp).await;
-        pipeline
-            .append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
+        let svc = service();
+        svc.append_event("p", OtkEvent::Detection(make_detection_with_seq(1)))
             .await
             .unwrap();
-        pipeline
-            .append_event("p", OtkEvent::Detection(make_detection_with_seq(2)))
+        svc.append_event("p", OtkEvent::Detection(make_detection_with_seq(2)))
             .await
             .unwrap();
-        let page = pipeline.read_events(0, 10).await.unwrap();
+        let page = svc.read_events(0, 10).await.unwrap();
         assert_eq!(page.entries.len(), 2);
         assert_eq!(page.entries[0].offset, 0);
         assert_eq!(page.entries[1].offset, 1);

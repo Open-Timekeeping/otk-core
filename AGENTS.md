@@ -24,7 +24,7 @@ The terms below are normative. Spelled out in detail in [`spec/glossary.md`](spe
 - **Timebase**, a first-class clock source with sync state, resolution, and uncertainty.
 - **Timing Runtime Node** (binary `otk-node`, crate [`timing-node`](timing-node/)), the deployable server process. Hosts one or more ingest listeners, one per transport binding.
 - **Timing Fabric**, the deployed topology: nodes + producers + adapters + timebases + apps + storage + operator tools. Not a single repo or process.
-- **Timing Core** (crate [`timing-core`](timing-core/)), the timing-domain engine. A library, not a server.
+- **Timing Core** (crate [`timing-core`](timing-core/)), the hexagon: the timing-domain engine, the application services that orchestrate it, **and** the inbound/outbound port traits that define the boundary. Owns `CrossingProcessor`, `SequenceGate`, `EventIngestService`, plus `EventIngestPort` + `EventQueryPort` (inbound) and `EventLog` + `IngestMetrics` (outbound). A library; the composition root ([`timing-node`](timing-node/) at v0) wires up adapters that implement the outbound ports and routes inbound traffic to the service.
 - **OTK Protocol**, the transport-independent wire protocol used by Open Timekeeping components to exchange canonical timing messages. Defined as four stacked layers: Event Model, Wire Protocol, Frame Codec, Transport Binding. Not synonymous with TCP, HTTP, or any single transport.
 
 `timing-node` is broker-like in deployment shape; we do not call it "the broker" in normative documentation.
@@ -42,9 +42,8 @@ Read [`spec/architecture.md § Roles and where they live`](spec/architecture.md)
 | **Wire Protocol** | [`otk-protocol`](otk-protocol/) (package name; directory matches) |
 | **Frame Codec** | [`frame-codec`](frame-codec/) |
 | **Ingest Protocol** | [`ingest-protocol`](ingest-protocol/) (transport-agnostic server-side handshake / dispatch) |
-| **Port traits** | [`port-in-ingest`](port-in-ingest/), [`port-out-event-log`](port-out-event-log/) |
 | **External contracts** | [`otk-contracts`](otk-contracts/) (detector adapter + timebase traits) |
-| **Timing Core** | [`timing-core`](timing-core/) |
+| **Timing Core** | [`timing-core`](timing-core/) (hosts `domain/`, `ports/inbound/`, `ports/outbound/`, and `services/`; the inbound `EventIngestPort` / `EventQueryPort` and outbound `EventLog` / `IngestMetrics` port traits live here too) |
 | **Ingest transport adapters** | [`adapter-ingest-tcp`](adapter-ingest-tcp/), [`adapter-ingest-unix-socket`](adapter-ingest-unix-socket/) |
 | **Storage adapters** | [`adapter-event-log-segment`](adapter-event-log-segment/) (v0 backend) |
 | **Producer / consumer SDK** | [`otk-sdk`](otk-sdk/) |

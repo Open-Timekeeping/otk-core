@@ -3,8 +3,19 @@ name        = "timing-core"
 version     = "0.1.0"
 edition     = "2021"
 license     = "Apache-2.0"
-description = "Timing-domain engine for OTK. Converts raw detections into crossings."
+description = "Timing-domain engine, port contracts, and application services for OTK. Owns the domain model (Crossing, SequenceGate), the streaming crossing engine, the EventIngestService, and the inbound/outbound port traits adapters implement."
 
 [dependencies]
-event-model = { workspace = true }
-uuid        = { workspace = true, features = ["v4"] }
+event-model        = { workspace = true, features = ["serde"] }
+uuid               = { workspace = true, features = ["v4"] }
+
+async-trait        = { workspace = true }
+futures-util       = { workspace = true }
+serde              = { workspace = true, features = ["derive", "std"] }
+thiserror          = { workspace = true }
+tokio              = { workspace = true, features = ["sync"] }
+tracing            = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+tokio       = { workspace = true, features = ["rt", "macros", "sync", "time"] }
