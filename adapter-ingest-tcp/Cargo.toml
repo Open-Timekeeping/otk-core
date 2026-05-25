@@ -12,8 +12,33 @@ event-model     = { workspace = true }
 frame-codec     = { workspace = true }
 ingest-protocol = { workspace = true }
 async-trait     = { workspace = true }
+thiserror       = { workspace = true }
 tokio           = { workspace = true, features = ["net", "io-util", "rt-multi-thread", "macros", "time"] }
+# Optional TLS support. Behind the `tls` feature so consumers that only
+# need plaintext TCP don't pull rustls into their dep tree. `rustls`
+# loads with no crypto provider by default; we pin `aws-lc-rs` to keep
+# the dep graph deterministic and stay on the FIPS-eligible track.
+rustls          = { workspace = true, optional = true, features = ["aws_lc_rs"] }
+tokio-rustls    = { workspace = true, optional = true, features = ["aws_lc_rs"] }
+rustls-pemfile  = { workspace = true, optional = true }
+
+[features]
+default = []
+tls     = ["dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile"]
 
 [dev-dependencies]
 tokio    = { workspace = true, features = ["rt", "macros", "net", "io-util", "test-util"] }
 minicbor = { workspace = true, features = ["alloc", "derive"] }
+rcgen    = { workspace = true }
+tempfile = { workspace = true }
+ingest-protocol = { workspace = true }
+# Producer side for the end-to-end TLS test (server in this crate
+# accepting an otk-sdk Producer over TLS). Dev-only, so no production
+# dep cycle: otk-sdk does not depend on adapter-ingest-tcp.
+otk-sdk = { workspace = true, default-features = false, features = ["producer-tls"] }
+# Client-side TLS for the `tls` integration tests in this crate.
+# Re-enabled here without the `default = []` gate above because tests
+# are always built with all dev-dependencies.
+rustls         = { workspace = true, features = ["aws_lc_rs"] }
+tokio-rustls   = { workspace = true, features = ["aws_lc_rs"] }
+rustls-pemfile = { workspace = true }

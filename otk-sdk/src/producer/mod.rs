@@ -19,6 +19,8 @@ pub mod producer;
 pub mod seq;
 pub mod time;
 pub mod timebase;
+#[cfg(feature = "producer-tls")]
+pub mod tls;
 pub mod transport;
 
 pub use adapter::{
@@ -33,3 +35,6 @@ pub use timebase::{
     Timebase, TimebaseError, TimebaseEvent, TimebaseKind, TimebaseMetadataEvent, TimebaseState,
 };
 pub use transport::Transport;
+
+#[cfg(feature = "producer-tls")]
+pub use transport::TlsClientConfig;

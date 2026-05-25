@@ -79,7 +79,6 @@ The timebase model is settled in [architecture.md § Timebases are physical refe
 - **Default retention policy and trade-offs.** Retention is the bound on consumer outage tolerance. What's the shipped default, and how is it expressed in config (time / size / hybrid)? `RetentionPolicy::Indefinite` is the current default.
 - **Bootstrap response payload.** Confirmed in [architecture.md § Multi-node deployments are partitioning, not clustering](architecture.md) that nodes answer a bootstrap query with a directory of the deployment. The exact response schema (per-node fields, capability declarations, freshness/TTL semantics, whether bootstrap can return partial views) is still to be designed.
 - **Configuration format and hot-reload policy.** TOML format is shipped; hot-reload is not.
-- **TLS for the TCP transport.** Deferred; deployments needing wire encryption today should run OTK over an SSH tunnel or WireGuard. Native rustls support is planned.
 
 Resolved:
 - Multi-listener config: `[[listeners]]` array of `ListenerConfig::Tcp { … }` / `UnixSocket { … }`. All listeners feed the same canonical ingest pipeline.
@@ -89,6 +88,7 @@ Resolved:
 - **Sequence-gate restart persistence.** High-water marks are rebuilt from the segment log on `Node::new` (cross-ref the detector-adapter Resolved entry above; segment format v2 carries `producer_id` per entry, which is the gate's keyspace).
 - **W3C `traceparent` propagation through `OtkEnvelope`.** Optional `traceparent: Option<String>` field at CBOR index 7 on the envelope; producers using `otk-sdk` auto-extract from the current `tracing::Span` via `tracing-opentelemetry`; the runtime parents each per-event `tracing::Span` on the producer's remote span context. With no OTel SDK configured at runtime, the field is absent and the per-event span becomes a local root, so the default ops experience is unchanged.
 - **Pipeline atomicity: storage append vs `CrossingProcessor` state.** The processor splits into `peek_detection` (pure, returns the crossings a commit would emit) and `commit_detection` (mutates and returns the same). `NodePipeline::append_event` peeks before append and commits only on success, so a storage failure can no longer leave the processor's grouping window advanced past what was persisted.
+- **TLS for the TCP transport.** Optional rustls-backed TLS on any `tcp` listener via `[listeners.tls]` (server-auth-only by default; mTLS when `client_ca` is set). `adapter-ingest-tcp` and `otk-sdk` both grow a `tls` (server) / `producer-tls` (client) feature pulling rustls + tokio-rustls + rustls-pemfile. PEM material is loaded once at `Node::new` / `Producer::connect`; cert rotation requires a restart (hot-reload is tracked separately).
 
 ## Storage, `port-out-event-log` and `adapter-event-log-segment`
 

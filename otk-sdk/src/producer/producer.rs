@@ -3,12 +3,20 @@ use otk_protocol::{
     ids::ProducerId, Connect, ConnectAck, ConnectReject, Heartbeat, MessageType, OtkEnvelope,
     PROTOCOL_VERSION,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use crate::producer::error::ProducerError;
 use crate::producer::time::now_ns;
 use crate::producer::transport::Transport;
+
+/// Marker trait so the producer can hold either a plain `TcpStream` or
+/// a `TlsStream<TcpStream>` behind one `Box`. Producer traffic is low
+/// per connection (one detector's worth of events), so the per-byte
+/// vtable cost on the boxed stream is well below the noise floor; the
+/// type-erasure pays for itself in API simplicity.
+pub trait ProducerStream: AsyncRead + AsyncWrite + Send + Unpin {}
+impl<T: AsyncRead + AsyncWrite + Send + Unpin> ProducerStream for T {}
 
 const MAX_FRAME_BYTES: u32 = 65_535;
 
@@ -110,7 +118,7 @@ impl Default for ProducerConfig {
 /// Created via `Producer::connect`. Drives `send_event` to publish `OtkEvent`
 /// values; call `disconnect` for a graceful shutdown.
 pub struct Producer {
-    stream: TcpStream,
+    stream: Box<dyn ProducerStream>,
     producer_id: ProducerId,
     next_seq: u64,
 }
@@ -127,8 +135,13 @@ impl Producer {
             ));
         }
         let max_frame_bytes = config.max_frame_bytes;
-        let mut stream = match transport {
-            Transport::Tcp(addr) => TcpStream::connect(addr).await?,
+        let mut stream: Box<dyn ProducerStream> = match transport {
+            Transport::Tcp(addr) => Box::new(TcpStream::connect(addr).await?),
+            #[cfg(feature = "producer-tls")]
+            Transport::Tls { addr, config } => {
+                let tls = crate::producer::tls::connect_tls(addr, &config).await?;
+                Box::new(tls)
+            }
         };
 
         let producer_id = ProducerId::from(config.producer_id.as_str());
@@ -283,7 +296,10 @@ fn encode_envelope(envelope: &OtkEnvelope) -> Result<Vec<u8>, ProducerError> {
     minicbor::to_vec(envelope).map_err(|e| ProducerError::Encode(format!("envelope encode: {e}")))
 }
 
-async fn send_frame(stream: &mut TcpStream, payload: &[u8]) -> Result<(), ProducerError> {
+async fn send_frame<S: AsyncWrite + Unpin + ?Sized>(
+    stream: &mut S,
+    payload: &[u8],
+) -> Result<(), ProducerError> {
     let len = u32::try_from(payload.len()).map_err(|_| {
         ProducerError::Encode(format!("frame too large to send: {} bytes", payload.len()))
     })?;
@@ -297,7 +313,10 @@ async fn send_frame(stream: &mut TcpStream, payload: &[u8]) -> Result<(), Produc
     Ok(())
 }
 
-async fn recv_frame(stream: &mut TcpStream, max_bytes: u32) -> Result<Vec<u8>, ProducerError> {
+async fn recv_frame<S: AsyncRead + Unpin + ?Sized>(
+    stream: &mut S,
+    max_bytes: u32,
+) -> Result<Vec<u8>, ProducerError> {
     let mut len_buf = [0u8; 4];
     let n = stream.read(&mut len_buf).await?;
     if n == 0 {

@@ -128,6 +128,7 @@ fn node_config_for(storage_dir: &Path) -> NodeConfig {
             id: "tcp-main".into(),
             bind_addr: "127.0.0.1:0".parse().unwrap(),
             max_frame_bytes: 65_535,
+            tls: None,
         }],
         api_addr: "127.0.0.1:0".parse().unwrap(),
         storage_dir: storage_dir.to_path_buf(),

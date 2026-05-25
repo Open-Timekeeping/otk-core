@@ -87,6 +87,43 @@ discriminator. v0 ships `"tcp"` (every target) and `"unix-socket"`
 | `id` | `"tcp-main"` | Stable id used in metrics and logs. Must be unique across all listeners. |
 | `bind_addr` | — | Address the listener binds to. Required. |
 | `max_frame_bytes` | `65535` | Maximum incoming frame size in bytes. |
+| `tls` | unset (plain TCP) | Optional nested table that upgrades the listener to TLS. See [TLS](#tls) below. |
+
+#### TLS
+
+A `[listeners.tls]` block on a `tcp` listener turns the listener into a
+rustls TLS endpoint. PEM material is loaded once at `Node::new` time;
+restart to rotate certs.
+
+```toml
+[[listeners]]
+transport   = "tcp"
+id          = "tcp-secure"
+bind_addr   = "0.0.0.0:8463"
+
+[listeners.tls]
+cert_chain  = "/etc/otk/server-chain.pem"
+private_key = "/etc/otk/server-key.pem"
+client_ca   = "/etc/otk/client-ca.pem"  # optional: enables mTLS
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `cert_chain` | — | Path to a PEM file holding the server's certificate (leaf first, intermediates after). Required when the `tls` block is present. |
+| `private_key` | — | Path to a PEM file holding the server's private key (PKCS#8, RSA, or SEC1). Required when the `tls` block is present. |
+| `client_ca` | unset | Optional path to a PEM file of trusted client-cert CAs. When set, the listener enforces mutual TLS: clients without a cert chained to this CA are rejected at the TLS handshake. When unset, clients authenticate via the application-layer shared-secret token in `auth.producer_tokens`. |
+
+Generating a self-signed dev cert (one-liner):
+
+```sh
+openssl req -x509 -newkey rsa:4096 -nodes \
+    -keyout server-key.pem -out server-chain.pem \
+    -days 365 -subj "/CN=otk-node.lan" \
+    -addext "subjectAltName = DNS:otk-node.lan,DNS:localhost,IP:127.0.0.1"
+```
+
+Producers using `otk-sdk` with the `producer-tls` feature can then
+connect via `Transport::Tls { addr, config: TlsClientConfig { … } }`.
 
 `transport = "unix-socket"` (Unix targets only; configs containing this
 variant parse cleanly on Windows but `Node::new` fails the build at
@@ -123,8 +160,14 @@ unauthenticated so external probes and Prometheus scrapers can reach them.
 ## v0 scope
 
 **What works:**
-- One or more TCP ingest listeners (plaintext). One or more Unix-socket
-  ingest listeners on Unix targets (cfg-gated; mixed TCP + Unix configs supported).
+- One or more TCP ingest listeners (plaintext or TLS, per-listener via
+  the `tls` block; see [TLS](#tls)). One or more Unix-socket ingest
+  listeners on Unix targets (cfg-gated; mixed TCP + Unix configs
+  supported).
+- Optional mutual TLS on any TCP listener (`tls.client_ca` PEM bundle).
+  When set, clients must present a cert chained to that CA; without it,
+  the TLS handshake fails server-side and the OTK handshake never
+  starts.
 - OTK handshake: `Connect` / `ConnectAck` with protocol version 0.
 - Producer authentication via shared-secret tokens (`Connect.auth_token`,
   `NodeConfig.auth.producer_tokens` allow-list). Empty allow-list = open
@@ -157,9 +200,6 @@ unauthenticated so external probes and Prometheus scrapers can reach them.
   default ops experience is unchanged.
 
 **Deferred:**
-- TLS on the ingest listener (rustls plumbing planned; current advice
-  for wire-encryption deployments is to run OTK over an SSH tunnel or
-  WireGuard).
 - Non-TCP/Unix transport bindings (USB CDC, serial, raw Ethernet).
 - Plugin loading (`plugin-api` not yet specified).
 - Detector and timebase registry.

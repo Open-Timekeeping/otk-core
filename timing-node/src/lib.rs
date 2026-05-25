@@ -13,7 +13,9 @@ mod ports;
 mod sequence_gate;
 mod trace_context;
 
-pub use config::{load_from_file, ApiConfig, AuthConfig, ListenerConfig, NodeConfig};
+pub use config::{
+    load_from_file, ApiConfig, AuthConfig, ListenerConfig, NodeConfig, TlsListenerConfig,
+};
 pub use metrics::Metrics;
 pub use pipeline::{AppendOutcome, NodePipeline};
 pub use ports::{EventEntry, EventPage, EventQueryPort, QueryError};
@@ -22,7 +24,7 @@ pub use sequence_gate::{seed_from_log, seed_from_log_box, GateDecision, Sequence
 use std::sync::Arc;
 
 use adapter_event_log_segment::{SegmentLog, SegmentLogConfig};
-use adapter_ingest_tcp::{TcpIngestConfig, TcpIngestPort};
+use adapter_ingest_tcp::{TcpIngestConfig, TcpIngestPort, TlsConfig as AdapterTlsConfig};
 use api::AppState;
 use auth::build_producer_authoriser;
 use ingest::run_listener;
@@ -112,11 +114,17 @@ impl Node {
                     id,
                     bind_addr,
                     max_frame_bytes,
+                    tls,
                 } => {
                     let ingest_config = TcpIngestConfig {
                         bind_addr: *bind_addr,
                         max_frame_bytes: *max_frame_bytes,
                         handshake_timeout: std::time::Duration::from_secs(5),
+                        tls: tls.as_ref().map(|t| AdapterTlsConfig {
+                            cert_chain: t.cert_chain.clone(),
+                            private_key: t.private_key.clone(),
+                            client_ca: t.client_ca.clone(),
+                        }),
                     };
                     let port =
                         TcpIngestPort::bind_with_auth(ingest_config, Arc::clone(&authoriser))

@@ -1,5 +1,22 @@
 use std::path::{Path, PathBuf};
 
+/// TLS server configuration for a `tcp` listener.
+///
+/// Mirrors `adapter_ingest_tcp::TlsConfig` but lives in `timing-node` so
+/// it can derive `serde::Deserialize` (the adapter crate's TlsConfig is
+/// internal and not serde-aware). Loaded from TOML; both PEM paths are
+/// read at `Node::new` time so a missing cert surfaces at startup, not
+/// at first connection.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct TlsListenerConfig {
+    pub cert_chain: PathBuf,
+    pub private_key: PathBuf,
+    /// Optional. When set, the listener enforces mutual TLS: clients
+    /// must present a cert chained to this CA bundle.
+    #[serde(default)]
+    pub client_ca: Option<PathBuf>,
+}
+
 /// One ingest listener entry in [`NodeConfig::listeners`].
 ///
 /// One variant per supported transport binding. v0 ships TCP and AF_UNIX
@@ -19,6 +36,23 @@ pub enum ListenerConfig {
         bind_addr: std::net::SocketAddr,
         #[serde(default = "default_max_frame_bytes")]
         max_frame_bytes: u32,
+
+        /// Optional TLS configuration. When `Some(...)`, this listener
+        /// accepts TLS connections (and mTLS when `client_ca` is set).
+        /// When `None`, plain TCP. Only meaningful when the runtime is
+        /// built with adapter-ingest-tcp's `tls` feature enabled (which
+        /// timing-node turns on unconditionally).
+        ///
+        /// TOML form:
+        ///
+        /// ```toml
+        /// [[listeners.tls]]
+        /// cert_chain = "/etc/otk/server-chain.pem"
+        /// private_key = "/etc/otk/server-key.pem"
+        /// client_ca = "/etc/otk/client-ca.pem"  # optional, for mTLS
+        /// ```
+        #[serde(default)]
+        tls: Option<TlsListenerConfig>,
     },
     UnixSocket {
         #[serde(default = "default_unix_id")]
@@ -133,6 +167,7 @@ impl Default for NodeConfig {
                 id: default_tcp_id(),
                 bind_addr: "0.0.0.0:8463".parse().unwrap(),
                 max_frame_bytes: default_max_frame_bytes(),
+                tls: None,
             }],
             api_addr: "0.0.0.0:8080".parse().unwrap(),
             storage_dir: PathBuf::from("data"),
@@ -189,6 +224,7 @@ max_frame_bytes = 1024
             id,
             bind_addr,
             max_frame_bytes,
+            tls,
         } = &loaded.listeners[0]
         else {
             panic!("expected TCP listener");
@@ -196,6 +232,7 @@ max_frame_bytes = 1024
         assert_eq!(id, "tcp-main");
         assert_eq!(bind_addr.port(), 7420);
         assert_eq!(*max_frame_bytes, 1024);
+        assert!(tls.is_none(), "no tls field in TOML → defaults to None");
     }
 
     #[test]
@@ -288,5 +325,66 @@ force_rebind       = true
             }
             _ => panic!("expected UnixSocket variant"),
         }
+    }
+
+    #[test]
+    fn tcp_listener_with_tls_parses() {
+        // mTLS configuration: all three PEM paths populated.
+        let toml_str = r#"
+node_id     = "n"
+api_addr    = "0.0.0.0:9090"
+storage_dir = "data"
+
+[[listeners]]
+transport       = "tcp"
+id              = "tcp-secure"
+bind_addr       = "0.0.0.0:8463"
+
+[listeners.tls]
+cert_chain  = "/etc/otk/server-chain.pem"
+private_key = "/etc/otk/server-key.pem"
+client_ca   = "/etc/otk/client-ca.pem"
+"#;
+        let loaded: NodeConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(loaded.listeners.len(), 1);
+        let ListenerConfig::Tcp { tls, .. } = &loaded.listeners[0] else {
+            panic!("expected TCP listener");
+        };
+        let tls = tls.as_ref().expect("tls block should parse");
+        assert_eq!(tls.cert_chain, PathBuf::from("/etc/otk/server-chain.pem"));
+        assert_eq!(tls.private_key, PathBuf::from("/etc/otk/server-key.pem"));
+        assert_eq!(
+            tls.client_ca,
+            Some(PathBuf::from("/etc/otk/client-ca.pem")),
+            "client_ca present means mTLS is on"
+        );
+    }
+
+    #[test]
+    fn tcp_listener_with_tls_but_no_client_ca_parses() {
+        // Server-auth-only TLS (no mTLS): client_ca omitted.
+        let toml_str = r#"
+node_id     = "n"
+api_addr    = "0.0.0.0:9090"
+storage_dir = "data"
+
+[[listeners]]
+transport   = "tcp"
+id          = "tcp-secure"
+bind_addr   = "0.0.0.0:8463"
+
+[listeners.tls]
+cert_chain  = "/etc/otk/server-chain.pem"
+private_key = "/etc/otk/server-key.pem"
+"#;
+        let loaded: NodeConfig = toml::from_str(toml_str).unwrap();
+        let ListenerConfig::Tcp { tls, .. } = &loaded.listeners[0] else {
+            panic!("expected TCP listener");
+        };
+        let tls = tls.as_ref().unwrap();
+        assert!(
+            tls.client_ca.is_none(),
+            "no client_ca means server-auth-only TLS"
+        );
     }
 }

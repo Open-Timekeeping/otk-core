@@ -60,6 +60,19 @@ tracing-subscriber = "0.3"
 tracing-opentelemetry = { version = "0.33", default-features = false }
 opentelemetry      = { version = "0.32", default-features = false, features = ["trace"] }
 uuid               = "1"
+# TLS over TCP. `rustls` is the pure-Rust TLS impl; `tokio-rustls`
+# wraps it for the tokio async runtime; `rustls-pemfile` parses PEM
+# cert/key files at bind time. `aws_lc_rs` provider chosen for FIPS
+# track and broad platform support; flip to `ring` if a future build
+# target needs it. Pulled in only by adapter-ingest-tcp and otk-sdk
+# under their respective `tls` feature flags so non-TLS consumers pay
+# no dep-tree cost.
+rustls             = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+tokio-rustls       = { version = "0.26", default-features = false }
+rustls-pemfile     = "2"
+# Dev-only: generate self-signed CAs / server certs / client certs in
+# tests so we don't ship fixture certs in the repo.
+rcgen              = "0.13"
 
 # Intra-workspace path deps. Members that need any of these declare
 # `<name> = { workspace = true }` (plus optional `features = [...]`,
