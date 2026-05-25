@@ -199,6 +199,20 @@ unauthenticated so external probes and Prometheus scrapers can reach them.
   silently absent and the per-event span becomes a local root, so the
   default ops experience is unchanged.
 
+**Hot-reload:**
+- `auth.producer_tokens` and `auth.api_tokens` reload atomically when
+  the config file is edited (cross-platform file watcher; debounced).
+  Active sessions stay connected; new handshakes / API requests see
+  the rotated list immediately.
+- Other fields (`node_id`, `storage_dir`, `listeners`, `api_addr`,
+  `api.allowed_origins`, TLS material) require a restart. The watcher
+  logs a `warn!` naming each changed field so the operator knows the
+  edit didn't take effect for those.
+- Hot-reload only runs when the node was started with `--config PATH`
+  (there's a file to watch); in-process embedders that pass an in-
+  memory `NodeConfig` to `Node::new` skip the watcher and rotate
+  tokens directly via the public `AuthState` handle.
+
 **Deferred:**
 - Non-TCP/Unix transport bindings (USB CDC, serial, raw Ethernet).
 - Plugin loading (`plugin-api` not yet specified).
