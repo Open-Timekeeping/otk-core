@@ -1,4 +1,6 @@
-use timing_node::{load_from_file, run, NodeConfig};
+use std::path::PathBuf;
+
+use timing_node::{run, run_from_config_path, NodeConfig};
 
 #[tokio::main]
 async fn main() {
@@ -9,8 +11,19 @@ async fn main() {
         )
         .init();
 
-    let config = parse_config();
-    run(config).await;
+    // Distinguish "loaded from a file on disk" from "running with
+    // built-in defaults". The file-path case enables config hot-
+    // reload; the default-config case skips the watcher (there's no
+    // file to watch).
+    match parse_config_source() {
+        ConfigSource::Default => run(NodeConfig::default()).await,
+        ConfigSource::File(path) => run_from_config_path(path).await,
+    }
+}
+
+enum ConfigSource {
+    Default,
+    File(PathBuf),
 }
 
 const USAGE: &str = "\
@@ -36,7 +49,7 @@ Environment:
 // the fn level keeps the future extension obvious instead of churning
 // the structure.
 #[allow(clippy::never_loop)]
-fn parse_config() -> NodeConfig {
+fn parse_config_source() -> ConfigSource {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -49,13 +62,7 @@ fn parse_config() -> NodeConfig {
                 std::process::exit(0);
             }
             "-c" | "--config" => match args.next() {
-                Some(path) => match load_from_file(std::path::Path::new(&path)) {
-                    Ok(cfg) => return cfg,
-                    Err(e) => {
-                        eprintln!("error loading config from {path}: {e}");
-                        std::process::exit(1);
-                    }
-                },
+                Some(path) => return ConfigSource::File(PathBuf::from(path)),
                 None => {
                     eprintln!("--config requires a path argument");
                     eprintln!();
@@ -71,5 +78,5 @@ fn parse_config() -> NodeConfig {
             }
         }
     }
-    NodeConfig::default()
+    ConfigSource::Default
 }

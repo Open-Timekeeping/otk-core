@@ -10,8 +10,11 @@ mod ingest;
 mod metrics;
 mod pipeline;
 mod ports;
+mod reload;
 mod sequence_gate;
 mod trace_context;
+
+pub use auth::AuthState;
 
 pub use config::{
     load_from_file, ApiConfig, AuthConfig, ListenerConfig, NodeConfig, TlsListenerConfig,
@@ -62,13 +65,45 @@ pub struct Node {
     api_listener: tokio::net::TcpListener,
     pipeline: Arc<NodePipeline>,
     metrics: Arc<Metrics>,
-    api_tokens: Vec<String>,
+    /// Hot-reloadable auth state. The API router reads through this on
+    /// every request; the producer-side authoriser reads through it on
+    /// every Connect handshake.
+    auth: Arc<AuthState>,
     allowed_origins: Vec<String>,
     node_id: String,
+    /// Path the config was loaded from. `None` when [`Node::new`] was
+    /// given an in-memory `NodeConfig` directly (tests, embedders).
+    /// `Some` enables the hot-reload watcher in `run_with_shutdown`.
+    config_path: Option<std::path::PathBuf>,
+    /// Cached for the hot-reload watcher to use as its initial diff
+    /// baseline. Cheaper to clone here than to re-read the file at
+    /// run-time.
+    initial_config: NodeConfig,
 }
 
 impl Node {
+    /// Construct a node from an in-memory config. Hot-reload is
+    /// disabled; use [`Node::from_config_path`] to wire the file
+    /// watcher.
     pub async fn new(config: NodeConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_inner(config, None).await
+    }
+
+    /// Construct a node from a TOML file on disk and remember the
+    /// path so [`Node::run_with_shutdown`] can spawn the hot-reload
+    /// watcher. Loading errors surface unchanged.
+    pub async fn from_config_path(
+        path: impl Into<std::path::PathBuf>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let path = path.into();
+        let cfg = load_from_file(&path)?;
+        Self::new_inner(cfg, Some(path)).await
+    }
+
+    async fn new_inner(
+        config: NodeConfig,
+        config_path: Option<std::path::PathBuf>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         if config.listeners.is_empty() {
             return Err("no ingest listeners configured".into());
         }
@@ -105,7 +140,15 @@ impl Node {
             seen_ids.insert(id, index);
         }
 
-        let authoriser = build_producer_authoriser(&config.auth.producer_tokens);
+        // Shared, hot-reloadable auth state: producer-side authoriser
+        // and API-side bearer-token middleware both read through this.
+        // The config-watcher (started in `run_with_shutdown` when a
+        // config path is known) rotates the token lists in-place.
+        let auth = Arc::new(AuthState::new(
+            config.auth.producer_tokens.clone(),
+            config.auth.api_tokens.clone(),
+        ));
+        let authoriser = build_producer_authoriser(Arc::clone(&auth));
 
         let mut ingest = Vec::with_capacity(config.listeners.len());
         for listener in &config.listeners {
@@ -199,13 +242,19 @@ impl Node {
             Arc::clone(&gate),
         ));
 
+        // Hold on to a copy of the parsed config so the hot-reload
+        // watcher has a baseline to diff against. Cheap clone (Vecs,
+        // Strings, PathBufs).
+        let initial_config = config.clone();
         Ok(Self {
             ingest,
             api_listener,
             pipeline,
             metrics,
-            api_tokens: config.auth.api_tokens,
+            auth,
             allowed_origins: config.api.allowed_origins,
+            config_path,
+            initial_config,
             node_id: config.node_id,
         })
     }
@@ -508,9 +557,11 @@ impl Node {
             api_listener,
             pipeline,
             metrics,
-            api_tokens,
+            auth,
             allowed_origins,
             node_id,
+            config_path,
+            initial_config,
         } = self;
 
         let ingest_summary: Vec<(String, String)> = ingest
@@ -546,7 +597,7 @@ impl Node {
             node_id: Arc::<str>::from(node_id.as_str()),
             query,
             metrics: Arc::clone(&metrics),
-            api_tokens: Arc::new(api_tokens),
+            auth: Arc::clone(&auth),
         };
         let api_router = api::router(api_state, &allowed_origins);
         let mut api_shutdown_rx = shutdown_rx.clone();
@@ -570,7 +621,7 @@ impl Node {
             }
         });
 
-        let ingest_tasks: Vec<_> = ingest
+        let mut ingest_tasks: Vec<_> = ingest
             .into_iter()
             .map(|listener| {
                 let pipeline = Arc::clone(&pipeline);
@@ -583,6 +634,21 @@ impl Node {
                 })
             })
             .collect();
+
+        // Hot-reload watcher: only spawned when the operator launched
+        // via `from_config_path` (i.e. there's a file to watch). In-
+        // memory NodeConfig callers (tests, embedders) skip the
+        // watcher and have to swap auth state directly via the
+        // public `AuthState` handle if they want to.
+        if let Some(path) = config_path {
+            let watcher = reload::spawn_config_watcher(
+                path,
+                Arc::clone(&auth),
+                initial_config,
+                shutdown_rx.clone(),
+            );
+            ingest_tasks.push(watcher);
+        }
 
         (ingest_tasks, api_task)
     }
@@ -722,6 +788,24 @@ fn report_classified_exit(level: tracing::Level, err: &ShutdownError) {
 /// surface as `exit(1)`.
 pub async fn run(config: NodeConfig) {
     let node = match Node::new(config).await {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("fatal: {e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = node.run_until_shutdown().await {
+        eprintln!("fatal: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// Same as [`run`] but loads the config from a TOML file on disk and
+/// enables the hot-reload watcher so subsequent edits to that file
+/// rotate the auth-token allow-lists in place without dropping
+/// connections. The `otk-node` CLI calls this when given `-c PATH`.
+pub async fn run_from_config_path(path: std::path::PathBuf) {
+    let node = match Node::from_config_path(path).await {
         Ok(n) => n,
         Err(e) => {
             eprintln!("fatal: {e}");

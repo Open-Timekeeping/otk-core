@@ -35,6 +35,12 @@ tracing-subscriber        = { workspace = true, features = ["env-filter"] }
 # parent set call is harmless (the default empty context).
 tracing-opentelemetry     = { workspace = true }
 opentelemetry             = { workspace = true }
+# Hot-reload: file watcher + atomic-swap'd auth tokens. The watcher runs
+# as a tokio task spawned next to the ingest listeners; auth state is
+# arc-swapped so token rotation does not drop active sessions.
+arc-swap                  = { workspace = true }
+notify                    = { workspace = true }
+notify-debouncer-mini     = { workspace = true }
 
 # The Unix-socket ingest adapter is cfg(unix) internally; gating the
 # dep itself keeps it out of non-Unix builds where it would compile to

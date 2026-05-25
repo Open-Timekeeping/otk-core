@@ -60,6 +60,13 @@ tracing-subscriber = "0.3"
 tracing-opentelemetry = { version = "0.33", default-features = false }
 opentelemetry      = { version = "0.32", default-features = false, features = ["trace"] }
 uuid               = "1"
+# Hot-reload: cross-platform file watching + atomic Arc rotation for
+# auth-token swaps without dropping active connections. notify's
+# `debouncer-mini` companion crate coalesces the noisy raw filesystem
+# events into a single change notification per "file edit".
+arc-swap           = "1"
+notify             = { version = "8", default-features = false, features = ["macos_kqueue"] }
+notify-debouncer-mini = { version = "0.7", default-features = false }
 # TLS over TCP. `rustls` is the pure-Rust TLS impl; `tokio-rustls`
 # wraps it for the tokio async runtime; `rustls-pemfile` parses PEM
 # cert/key files at bind time. `aws_lc_rs` provider chosen for FIPS

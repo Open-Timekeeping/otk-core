@@ -21,7 +21,7 @@ use crate::ports::{EventPage, EventQueryPort, QueryError};
 /// State shared with every request handler and middleware.
 ///
 /// `Clone` is cheap: every field is either an `Arc` (`query`, `metrics`,
-/// `api_tokens`) or an `Arc<str>` (`node_id`). Axum clones this state for
+/// `auth`) or an `Arc<str>` (`node_id`). Axum clones this state for
 /// each request and again per middleware layer, so per-clone allocation
 /// matters at request rates.
 ///
@@ -29,13 +29,19 @@ use crate::ports::{EventPage, EventQueryPort, QueryError};
 /// consumed once by `router()` to build the `CorsLayer`, never read per-
 /// request, so keeping it here would have cloned a `Vec<String>` per
 /// request for nothing.
+///
+/// `auth` is the shared, hot-reloadable token state. The bearer-token
+/// middleware loads the current `api_tokens` snapshot per request via
+/// `auth.current_api_tokens()`; rotating tokens at the `AuthState` level
+/// takes effect on the next request without re-creating the router.
 #[derive(Clone)]
 pub struct AppState {
     pub node_id: Arc<str>,
     pub query: Arc<dyn EventQueryPort>,
     pub metrics: Arc<Metrics>,
-    /// API bearer tokens; empty = no auth required.
-    pub api_tokens: Arc<Vec<String>>,
+    /// Hot-reloadable auth state. API bearer tokens are read on every
+    /// request via `auth.current_api_tokens()`.
+    pub auth: Arc<crate::auth::AuthState>,
 }
 
 pub fn router(state: AppState, allowed_origins: &[String]) -> Router {
@@ -97,7 +103,12 @@ async fn require_api_token(
     request: Request,
     next: Next,
 ) -> Response {
-    if state.api_tokens.is_empty() {
+    // Snapshot the current allow-list once per request. Concurrent
+    // hot-reloads (config-file watcher swapping the list) don't
+    // invalidate the snapshot mid-comparison; the next request picks
+    // up the new value.
+    let api_tokens = state.auth.current_api_tokens();
+    if api_tokens.is_empty() {
         return next.run(request).await;
     }
     let supplied = request
@@ -120,7 +131,7 @@ async fn require_api_token(
         Some(t) => {
             let supplied_bytes = t.as_bytes();
             let mut hit = false;
-            for allowed in state.api_tokens.iter() {
+            for allowed in api_tokens.iter() {
                 // Bitwise OR (not `||`) so the right-hand side is always
                 // evaluated, preventing short-circuit timing.
                 hit |= constant_time_eq(allowed.as_bytes(), supplied_bytes);
