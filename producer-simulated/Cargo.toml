@@ -10,7 +10,7 @@ name = "otk-simulator"
 path = "src/main.rs"
 
 [dependencies]
-otk-sdk            = { workspace = true, features = ["producer"] }
+otk-sdk            = { workspace = true, features = ["producer", "producer-tls"] }
 async-trait        = { workspace = true }
 # `std` so derive(Serialize/Deserialize) on the std-backed config
 # structs (String, Vec<String>, ...) works. The workspace pin keeps
