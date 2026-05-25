@@ -19,3 +19,9 @@
 # nested copies so per-crate dev sessions are safe too.
 /dev-certs/
 **/dev-certs/
+
+# Default `storage_dir` for the shipped sample node configs
+# (`timing-node/node-tls.toml`, `NodeConfig::default()`). The
+# segment log is run-state, not source.
+/data/
+**/data/

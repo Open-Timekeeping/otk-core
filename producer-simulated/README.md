@@ -12,15 +12,28 @@ dependencies; no knowledge of ports, adapters, or timing node internals.
 ## Usage
 
 ```bash
-cargo run --bin otk-simulator
-cargo run --bin otk-simulator -- --config sim-start.toml
+# Plain TCP, built-in defaults (connects to 127.0.0.1:8463).
+cargo run -p producer-simulated --bin otk-simulator
 
-# TLS (server-auth-only) or mTLS, against a node configured with
-# `[listeners.tls]`. See sim-start-tls.toml for the schema; both
-# `auth_token` (shared-secret) and `[tls]` (cert-based) are optional
-# and independent.
-cargo run --bin otk-simulator -- --config sim-start-tls.toml
+# Plain TCP, with a config file.
+cargo run -p producer-simulated --bin otk-simulator -- \
+    --config producer-simulated/sim-start.toml
+
+# Mutual TLS, against a node configured with `[listeners.tls]`.
+# Three-command flow from the workspace root:
+cargo run -p otk-devcerts -- --out ./dev-certs
+cargo run -p timing-node --bin otk-node -- \
+    --config timing-node/node-tls.toml
+cargo run -p producer-simulated --bin otk-simulator -- \
+    --config producer-simulated/sim-start-tls.toml
 ```
+
+`sim-start-tls.toml` references its PEM material at relative paths
+under `./dev-certs/` — the directory `otk-devcerts` writes to by
+default. **Run from the workspace root** so those relative paths
+resolve. Both `auth_token` (shared-secret) and `[tls]` (cert-based)
+are optional and independent; see the file's inline comments for the
+full schema.
 
 ## Library usage
 
