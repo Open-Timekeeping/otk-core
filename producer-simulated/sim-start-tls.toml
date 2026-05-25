@@ -1,0 +1,25 @@
+# Sample TLS-enabled simulator config. Mirrors sim-start.toml but
+# connects over TLS (mTLS when both `client_cert` and `client_key`
+# are set). Edit the paths to point at your own cert material; the
+# values below assume you ran the recipe in `timing-node/README.md`
+# § "TLS" against a node configured with `[listeners.tls]`.
+node_addr             = "127.0.0.1:8463"
+detector_id           = "sim-start"
+producer_id           = "sim-start"
+timing_point_ids      = ["tp-start"]
+subject_ids           = ["car-1", "car-2", "car-3"]
+detection_interval_ms = 2000
+
+[tls]
+# PEM bundle the producer should trust as a server-cert root. For a
+# self-signed dev deployment, point at the server's own CA cert.
+trust_roots = "./server-ca.pem"
+# SNI sent in the ClientHello. Must match a Subject Alternative Name
+# on the server's leaf cert.
+server_name = "otk-node.lan"
+# For server-auth-only TLS, leave the next two unset.
+# For mutual TLS, both must be set: the producer presents this cert
+# chain to the server, which validates it against `[listeners.tls]
+# client_ca` (see timing-node/README.md § TLS).
+client_cert = "./sim-cert.pem"
+client_key  = "./sim-key.pem"

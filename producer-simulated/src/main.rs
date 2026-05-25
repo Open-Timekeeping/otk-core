@@ -1,4 +1,4 @@
-use otk_sdk::producer::{ProducerConfig, Transport};
+use otk_sdk::producer::{ProducerConfig, TlsClientConfig as SdkTlsClientConfig, Transport};
 use producer_simulated::{config::load_from_file, runner, SimulatorAdapter, SimulatorConfig};
 use tracing::info;
 
@@ -9,12 +9,45 @@ async fn main() {
         .init();
 
     let sim_config = parse_config();
-    let transport = Transport::Tcp(sim_config.node_addr);
-    let producer_config = ProducerConfig::new(sim_config.producer_id.clone());
+    // Build the transport from the config. `tls` present → TLS, else plain TCP.
+    // Doing the TLS-config translation here keeps the producer-simulated
+    // config struct serde-friendly and otk-sdk's TlsClientConfig out of
+    // the public TOML surface.
+    let transport = match sim_config.tls.as_ref() {
+        Some(tls) => Transport::Tls {
+            addr: sim_config.node_addr,
+            config: SdkTlsClientConfig {
+                trust_roots: tls.trust_roots.clone(),
+                server_name: tls.server_name.clone(),
+                client_cert: tls.client_cert.clone(),
+                client_key: tls.client_key.clone(),
+            },
+        },
+        None => Transport::Tcp(sim_config.node_addr),
+    };
+    let mut producer_config = ProducerConfig::new(sim_config.producer_id.clone());
+    if let Some(token) = sim_config.auth_token.as_ref() {
+        producer_config = producer_config.with_auth_token(token);
+    }
 
+    let tls_mode = if sim_config.tls.is_some() {
+        if sim_config
+            .tls
+            .as_ref()
+            .map(|t| t.client_cert.is_some())
+            .unwrap_or(false)
+        {
+            "mtls"
+        } else {
+            "tls"
+        }
+    } else {
+        "tcp"
+    };
     info!(
         detector_id = %sim_config.detector_id,
         node_addr = %sim_config.node_addr,
+        transport = tls_mode,
         count = ?sim_config.count,
         interval_ms = sim_config.detection_interval_ms,
         "starting simulator"

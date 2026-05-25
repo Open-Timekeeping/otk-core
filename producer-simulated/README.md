@@ -14,6 +14,12 @@ dependencies; no knowledge of ports, adapters, or timing node internals.
 ```bash
 cargo run --bin otk-simulator
 cargo run --bin otk-simulator -- --config sim-start.toml
+
+# TLS (server-auth-only) or mTLS, against a node configured with
+# `[listeners.tls]`. See sim-start-tls.toml for the schema; both
+# `auth_token` (shared-secret) and `[tls]` (cert-based) are optional
+# and independent.
+cargo run --bin otk-simulator -- --config sim-start-tls.toml
 ```
 
 ## Library usage
@@ -32,7 +38,7 @@ runner::run(adapter, transport, producer_config, shutdown_rx).await?;
 
 ## Dependencies
 
-**Depends on:** [`otk-sdk`](../otk-sdk) (producer feature only).
+**Depends on:** [`otk-sdk`](../otk-sdk) (`producer` + `producer-tls` features). The `producer-tls` feature is on unconditionally so the simulator can connect to either plain-TCP or TLS-enabled nodes from a single binary.
 
 **Does not depend on:** any server-side port, adapter, or timing-node crate.
 
