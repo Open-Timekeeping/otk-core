@@ -1,0 +1,16 @@
+[package]
+name        = "otk-devcerts"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "One-shot dev cert generator for Open Timekeeping. Emits a server CA + leaf and a client CA + leaf so TLS / mTLS dev workflows have a working cert bundle in one command. Binary: otk-devcerts."
+
+[[bin]]
+name = "otk-devcerts"
+path = "src/main.rs"
+
+[dependencies]
+rcgen = { workspace = true }
+# `time` re-exported by rcgen for the `not_after` field; we depend on
+# it directly so the type name in our code matches what rcgen expects.
+time  = "0.3"

@@ -969,6 +969,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "otk-devcerts"
+version = "0.1.0"
+dependencies = [
+ "rcgen",
+ "time",
+]
+
+[[package]]
 name = "otk-protocol"
 version = "0.1.0"
 dependencies = [

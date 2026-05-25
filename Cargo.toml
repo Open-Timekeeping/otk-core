@@ -12,6 +12,7 @@ members  = [
     "adapter-event-log-segment",
     "adapter-ingest-unix-socket",
     "otk-sdk",
+    "otk-devcerts",
     "producer-simulated",
     "timing-node",
     "conformance",
