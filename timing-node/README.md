@@ -113,17 +113,29 @@ client_ca   = "/etc/otk/client-ca.pem"  # optional: enables mTLS
 | `private_key` | — | Path to a PEM file holding the server's private key (PKCS#8, RSA, or SEC1). Required when the `tls` block is present. |
 | `client_ca` | unset | Optional path to a PEM file of trusted client-cert CAs. When set, the listener enforces mutual TLS: clients without a cert chained to this CA are rejected at the TLS handshake. When unset, clients authenticate via the application-layer shared-secret token in `auth.producer_tokens`. |
 
-Generating a self-signed dev cert (one-liner):
+### Generating dev cert material
+
+The easiest path: use the bundled [`otk-devcerts`](../otk-devcerts)
+generator. One command emits a working server CA + leaf and a client
+CA + leaf with the right two-tier structure rustls expects:
 
 ```sh
-openssl req -x509 -newkey rsa:4096 -nodes \
-    -keyout server-key.pem -out server-chain.pem \
-    -days 365 -subj "/CN=otk-node.lan" \
-    -addext "subjectAltName = DNS:otk-node.lan,DNS:localhost,IP:127.0.0.1"
+cargo run -p otk-devcerts -- --out ./dev-certs
+# Output names the exact TOML lines to copy into both this config
+# and the producer's TLS config.
 ```
 
-Producers using `otk-sdk` with the `producer-tls` feature can then
-connect via `Transport::Tls { addr, config: TlsClientConfig { … } }`.
+If you prefer to bring your own certs (openssl, step-ca, your
+organisation's PKI, etc.), the requirements are: PEM-encoded leaf +
+chain in `cert_chain`, PEM-encoded private key in `private_key`,
+optional PEM bundle of trusted client CAs in `client_ca` (for mTLS).
+A self-signed leaf will fail handshake with `CaUsedAsEndEntity`;
+rustls needs a real two-tier root → leaf shape.
+
+Producers using `otk-sdk` with the `producer-tls` feature connect via
+`Transport::Tls { addr, config: TlsClientConfig { ... } }`. See the
+producer-simulated `sim-start-tls.toml` sample for a complete client
+config.
 
 `transport = "unix-socket"` (Unix targets only; configs containing this
 variant parse cleanly on Windows but `Node::new` fails the build at
