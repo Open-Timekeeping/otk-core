@@ -10,3 +10,12 @@
 *.rs.bk
 *.swp
 .DS_Store
+
+# `otk-devcerts` default output dir. The tool's README warns explicitly
+# against committing generated cert material (short-lived dev certs
+# with world-readable private keys), but a workflow that runs
+# `otk-devcerts --out ./dev-certs` from the repo root would otherwise
+# leave the bundle visible to `git add -A`. Ignore both top-level and
+# nested copies so per-crate dev sessions are safe too.
+/dev-certs/
+**/dev-certs/
