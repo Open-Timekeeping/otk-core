@@ -18,5 +18,13 @@ pub mod config;
 mod port;
 mod session;
 
+#[cfg(feature = "tls")]
+mod tls;
+
 pub use config::{TcpIngestConfig, DEFAULT_MAX_FRAME_BYTES};
 pub use port::TcpIngestPort;
+
+#[cfg(feature = "tls")]
+pub use config::TlsConfig;
+#[cfg(feature = "tls")]
+pub use tls::TlsAcceptError;

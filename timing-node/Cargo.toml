@@ -16,7 +16,7 @@ ingest-protocol           = { workspace = true }
 port-in-ingest            = { workspace = true }
 port-out-event-log        = { workspace = true }
 timing-core               = { workspace = true }
-adapter-ingest-tcp        = { workspace = true }
+adapter-ingest-tcp        = { workspace = true, features = ["tls"] }
 adapter-event-log-segment = { workspace = true }
 async-trait               = { workspace = true }
 axum                      = { workspace = true, features = ["json"] }

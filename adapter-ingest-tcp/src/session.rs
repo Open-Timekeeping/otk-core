@@ -9,15 +9,19 @@ use ingest_protocol::{
 };
 use otk_protocol::OtkEnvelope;
 use port_in_ingest::{IncomingEvent, IngestError, IngestSession};
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::config::TcpIngestConfig;
 
 const READ_CHUNK: usize = 4096;
 
-pub(crate) struct TcpIngestSession {
-    stream: TcpStream,
+/// Session over an arbitrary byte stream. Concrete `S` is `TcpStream`
+/// for plaintext listeners and `tokio_rustls::server::TlsStream<TcpStream>`
+/// for the `tls`-feature listeners; the session code below doesn't care
+/// which (handshake, framing, dispatch all work against any
+/// `AsyncRead + AsyncWrite + Send + Unpin` stream).
+pub(crate) struct TcpIngestSession<S> {
+    stream: S,
     peer_addr: String,
     producer_id: String,
     decoder: StreamFrameDecoder,
@@ -27,11 +31,14 @@ pub(crate) struct TcpIngestSession {
     pending: VecDeque<OtkEnvelope>,
 }
 
-impl TcpIngestSession {
+impl<S> TcpIngestSession<S>
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin,
+{
     /// Run the OTK server-side handshake. On success returns a session ready to
     /// produce events.
     pub(crate) async fn handshake(
-        mut stream: TcpStream,
+        mut stream: S,
         peer_addr: String,
         config: Arc<TcpIngestConfig>,
         authoriser: Arc<dyn ConnectAuthoriser>,
@@ -126,7 +133,10 @@ impl TcpIngestSession {
 }
 
 #[async_trait]
-impl IngestSession for TcpIngestSession {
+impl<S> IngestSession for TcpIngestSession<S>
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin,
+{
     async fn next_event(&mut self) -> Result<Option<IncomingEvent>, IngestError> {
         loop {
             if self.pending.is_empty() && !self.fill_pending().await? {
@@ -156,11 +166,14 @@ impl IngestSession for TcpIngestSession {
     }
 }
 
-async fn send_envelope(
-    stream: &mut TcpStream,
+async fn send_envelope<S>(
+    stream: &mut S,
     envelope: &OtkEnvelope,
     max_frame_size: usize,
-) -> Result<(), IngestError> {
+) -> Result<(), IngestError>
+where
+    S: AsyncWrite + Unpin,
+{
     let frame = encode_stream(envelope, max_frame_size).map_err(frame_err_to_ingest)?;
     stream.write_all(&frame).await.map_err(IngestError::Io)?;
     Ok(())

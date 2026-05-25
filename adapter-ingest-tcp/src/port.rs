@@ -11,10 +11,20 @@ use tokio::time::timeout;
 use crate::config::TcpIngestConfig;
 use crate::session::TcpIngestSession;
 
+#[cfg(feature = "tls")]
+use crate::tls::{build_tls_acceptor, TlsAcceptError};
+#[cfg(feature = "tls")]
+use tokio_rustls::TlsAcceptor;
+
 pub struct TcpIngestPort {
     listener: TcpListener,
     config: Arc<TcpIngestConfig>,
     authoriser: Arc<dyn ConnectAuthoriser>,
+    /// `Some` iff the config asked for TLS and the cert/key loaded
+    /// cleanly. Plain-TCP listeners hold `None` and skip the TLS
+    /// wrap on accept.
+    #[cfg(feature = "tls")]
+    tls_acceptor: Option<TlsAcceptor>,
 }
 
 impl TcpIngestPort {
@@ -45,11 +55,23 @@ impl TcpIngestPort {
             )));
         }
 
+        // Load + validate TLS material BEFORE binding the listener so a
+        // misconfigured cert path surfaces as a clear "bind failed"
+        // error rather than as a TLS handshake error on the first
+        // connection.
+        #[cfg(feature = "tls")]
+        let tls_acceptor = match &config.tls {
+            Some(tls_cfg) => Some(build_tls_acceptor(tls_cfg).map_err(tls_err_to_ingest)?),
+            None => None,
+        };
+
         let listener = TcpListener::bind(config.bind_addr).await?;
         Ok(Self {
             listener,
             config: Arc::new(config),
             authoriser,
+            #[cfg(feature = "tls")]
+            tls_acceptor,
         })
     }
 
@@ -58,15 +80,45 @@ impl TcpIngestPort {
     }
 }
 
+#[cfg(feature = "tls")]
+fn tls_err_to_ingest(e: TlsAcceptError) -> IngestError {
+    IngestError::Io(io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))
+}
+
 #[async_trait]
 impl EventIngestPort for TcpIngestPort {
     async fn accept(&self) -> Result<Box<dyn IngestSession>, IngestError> {
         let (stream, peer) = self.listener.accept().await?;
+        let peer_addr = peer.to_string();
+
+        // Branch on TLS-or-not. The session is generic over the byte
+        // stream, so the only difference is whether we wrap the
+        // TcpStream in a TlsStream before handing it to the session.
+        #[cfg(feature = "tls")]
+        if let Some(acceptor) = self.tls_acceptor.as_ref() {
+            let tls_stream = timeout(self.config.handshake_timeout, acceptor.accept(stream))
+                .await
+                .map_err(|_| IngestError::Handshake("TLS handshake timed out".into()))?
+                .map_err(|e| IngestError::Handshake(format!("TLS handshake failed: {e}")))?;
+            let session = timeout(
+                self.config.handshake_timeout,
+                TcpIngestSession::handshake(
+                    tls_stream,
+                    peer_addr,
+                    self.config.clone(),
+                    Arc::clone(&self.authoriser),
+                ),
+            )
+            .await
+            .map_err(|_| IngestError::Handshake("handshake timed out".into()))??;
+            return Ok(Box::new(session));
+        }
+
         let session = timeout(
             self.config.handshake_timeout,
             TcpIngestSession::handshake(
                 stream,
-                peer.to_string(),
+                peer_addr,
                 self.config.clone(),
                 Arc::clone(&self.authoriser),
             ),
@@ -89,6 +141,8 @@ mod tests {
             bind_addr: "127.0.0.1:0".parse().unwrap(),
             max_frame_bytes: 65_535,
             handshake_timeout: Duration::from_secs(5),
+            #[cfg(feature = "tls")]
+            tls: None,
         }
     }
 

@@ -49,6 +49,7 @@ async fn node_with(auth: AuthConfig, api: ApiConfig) -> (Node, tempfile::TempDir
             id: "tcp-main".into(),
             bind_addr: "127.0.0.1:0".parse().unwrap(),
             max_frame_bytes: 65_535,
+            tls: None,
         }],
         api_addr: "127.0.0.1:0".parse().unwrap(),
         storage_dir: tmp.path().to_path_buf(),
