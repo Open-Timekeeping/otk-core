@@ -3,10 +3,15 @@ name        = "adapter-ingest-tcp"
 version     = "0.1.0"
 edition     = "2021"
 license     = "Apache-2.0"
-description = "TCP ingest adapter for OTK. Implements port-in-ingest: accepts producer connections, decodes OTK frames, and delivers typed events to the timing node."
+description = "TCP ingest adapter for OTK. Implements the EventIngestPort inbound port (defined in timing-core::ports::inbound): accepts producer connections, decodes OTK frames, and delivers typed events to the timing node."
 
 [dependencies]
-port-in-ingest  = { workspace = true }
+# Adapters depend on `timing-core` for its port traits (here:
+# `EventIngestPort`, `IngestSession`, `IncomingEvent`, `IngestError`).
+# The per-adapter `clippy.toml` denies reaching beyond
+# `timing_core::ports::*` so the dep does not become a back-door into
+# the domain layer.
+timing-core     = { workspace = true }
 otk-protocol    = { workspace = true }
 event-model     = { workspace = true }
 frame-codec     = { workspace = true }

@@ -3,10 +3,15 @@ name        = "adapter-event-log-segment"
 version     = "0.1.0"
 edition     = "2021"
 license     = "Apache-2.0"
-description = "Segment-file event log backend for OTK. Implements port-out-event-log using fixed-budget segment files on disk."
+description = "Segment-file event log backend for OTK. Implements the EventLog outbound port (defined in timing-core::ports::outbound) using fixed-budget segment files on disk."
 
 [dependencies]
-port-out-event-log = { workspace = true }
+# Adapters depend on `timing-core` for its port traits (here:
+# `EventLog`, `LogSubscription`, `Offset`, `RetentionPolicy`,
+# `StorageError`, `LogEntry`). The per-adapter `clippy.toml` denies
+# reaching beyond `timing_core::ports::*` so the dep does not become a
+# back-door into the domain layer.
+timing-core        = { workspace = true }
 event-model        = { workspace = true }
 async-trait        = { workspace = true }
 minicbor           = { workspace = true, features = ["derive", "alloc"] }

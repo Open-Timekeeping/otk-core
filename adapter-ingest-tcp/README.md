@@ -1,12 +1,12 @@
 # adapter-ingest-tcp
 
-TCP ingest adapter for OTK. Implements [`port-in-ingest`](../port-in-ingest) over plain TCP, accepting producer connections and delivering typed events to the timing node.
+TCP ingest adapter for OTK. Implements [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) in `timing_core::ports::inbound` over plain TCP, accepting producer connections and delivering typed events to the timing node.
 
 > **Status: active.** Wraps the upstream `frame-codec` + `ingest-protocol` crates with TCP socket lifecycle. See [open questions](#open-questions) for deferred items.
 
 ## What this is
 
-`adapter-ingest-tcp` is an inbound adapter in the OTK hexagonal architecture. It implements the `EventIngestPort` and `IngestSession` traits from `port-in-ingest` using plain TCP as the physical transport.
+`adapter-ingest-tcp` is an inbound adapter in the OTK hexagonal architecture. It implements the `EventIngestPort` and `IngestSession` traits from `timing_core::ports::inbound` using plain TCP as the physical transport.
 
 The adapter is intentionally thin: it owns TCP accept loop and per-session byte I/O, and delegates everything else upward:
 
@@ -23,12 +23,12 @@ protocol-layer and contract crates
   otk-protocol/             wire DTOs (OtkEnvelope, Connect, ConnectAck, ...)
   frame-codec/              length-prefix + COBS frame codecs
   ingest-protocol/          transport-agnostic handshake + dispatch state machine
-  port-in-ingest/           inbound port contract (EventIngestPort, IngestSession)
+  timing-core/ports/inbound/           inbound port contract (EventIngestPort, IngestSession)
 adapter-ingest-tcp/         this crate: TCP socket lifecycle around the above
 timing-node/                injects this adapter at startup
 ```
 
-The timing node's **pipeline logic** depends only on the [`port-in-ingest`](../port-in-ingest) trait, never on this crate's concrete types. `timing-node` itself, as the composition root, does pull this crate in as a Cargo dependency to construct the concrete `TcpIngestPort` and hand it to the pipeline behind the trait object. The hexagonal boundary is at the runtime / pipeline seam, not at the binary's dependency graph.
+The timing node's **pipeline logic** depends only on the [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) in `timing_core::ports::inbound` trait, never on this crate's concrete types. `timing-node` itself, as the composition root, does pull this crate in as a Cargo dependency to construct the concrete `TcpIngestPort` and hand it to the pipeline behind the trait object. The hexagonal boundary is at the runtime / pipeline seam, not at the binary's dependency graph.
 
 ## Design decisions
 
@@ -47,7 +47,7 @@ The timing node's **pipeline logic** depends only on the [`port-in-ingest`](../p
 This crate uses sibling-relative path deps within the workspace:
 
 ```toml
-port-in-ingest  = { path = "../port-in-ingest" }
+timing-core     = { path = "../timing-core" }
 frame-codec     = { path = "../frame-codec" }
 ingest-protocol = { path = "../ingest-protocol" }
 # ...
@@ -59,7 +59,7 @@ Local development expects the consolidated workspace layout. `cargo build` from 
 
 ```rust
 use adapter_ingest_tcp::{TcpIngestPort, TcpIngestConfig};
-use port_in_ingest::{EventIngestPort, IngestSession};
+use timing_core::ports::inbound::{EventIngestPort, IngestSession};
 
 let config = TcpIngestConfig {
     bind_addr: "0.0.0.0:8463".parse().unwrap(),
@@ -87,7 +87,7 @@ loop {
 
 ## Dependencies
 
-**Depends on:** [`port-in-ingest`](../port-in-ingest), [`protocol`](../otk-protocol), [`event-model`](../event-model), [`frame-codec`](../frame-codec), [`ingest-protocol`](../ingest-protocol), `async-trait`, `tokio`.
+**Depends on:** [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) in `timing_core::ports::inbound`, [`protocol`](../otk-protocol), [`event-model`](../event-model), [`frame-codec`](../frame-codec), [`ingest-protocol`](../ingest-protocol), `async-trait`, `tokio`.
 
 **Used by:** [`timing-node`](../timing-node) as its default ingest transport.
 

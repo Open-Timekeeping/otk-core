@@ -3,15 +3,35 @@
 //! Exposes [`Node`] and [`NodeConfig`] so that integration tests and embedders can
 //! construct and drive a node programmatically without going through the CLI.
 
+//! Composition root for the OTK runtime.
+//!
+//! `timing-node` is intentionally thin. It is the only crate that knows
+//! how to build the runtime end-to-end:
+//!
+//! 1. Load configuration from a TOML file (`config`).
+//! 2. Construct the storage adapter ([`adapter_event_log_segment::SegmentLog`])
+//!    and seed the domain-policy [`SequenceGate`] from its persisted state.
+//! 3. Construct the application service
+//!    ([`timing_core::EventIngestService`]) with the storage and metrics
+//!    outbound ports injected.
+//! 4. Construct one inbound transport adapter per `[[listeners]]` entry
+//!    (`adapter-ingest-tcp` and, on Unix, `adapter-ingest-unix-socket`).
+//! 5. Spawn the listener + API tasks, wire shutdown, supervise.
+//!
+//! The domain (Crossing engine, SequenceGate) and the application service
+//! itself live in [`timing_core`]; the API trait the HTTP layer depends on
+//! lives in [`timing_core::ports::inbound`]. This crate owns only the wiring, the HTTP
+//! API surface (`api`), and the operational concerns that don't fit a
+//! pure-domain home: shared-secret auth (`auth`), metrics exposition
+//! (`metrics`), config hot-reload (`reload`), and trace-context
+//! propagation (`trace_context`).
+
 mod api;
 mod auth;
 mod config;
 mod ingest;
 mod metrics;
-mod pipeline;
-mod ports;
 mod reload;
-mod sequence_gate;
 mod trace_context;
 
 pub use auth::AuthState;
@@ -20,9 +40,16 @@ pub use config::{
     load_from_file, ApiConfig, AuthConfig, ListenerConfig, NodeConfig, TlsListenerConfig,
 };
 pub use metrics::Metrics;
-pub use pipeline::{AppendOutcome, NodePipeline};
-pub use ports::{EventEntry, EventPage, EventQueryPort, QueryError};
-pub use sequence_gate::{seed_from_log, seed_from_log_box, GateDecision, SequenceGate};
+
+// Re-export the timing-core application service surface so the existing
+// public API of `timing-node` (used by integration tests and embedders)
+// keeps working after the M11 hexagonal-alignment move. New code should
+// import these directly from `timing_core` / `timing_core::ports::inbound`.
+pub use timing_core::ports::inbound::{EventEntry, EventPage, EventQueryPort, QueryError};
+pub use timing_core::{
+    seed_from_log, seed_from_log_box, AppendOutcome, EventIngestService, GateDecision,
+    IngestMetrics, SequenceGate,
+};
 
 use std::sync::Arc;
 
@@ -31,7 +58,8 @@ use adapter_ingest_tcp::{TcpIngestConfig, TcpIngestPort, TlsConfig as AdapterTls
 use api::AppState;
 use auth::build_producer_authoriser;
 use ingest::run_listener;
-use port_in_ingest::EventIngestPort;
+use timing_core::ports::inbound::EventIngestPort;
+use timing_core::ProcessorConfig;
 use tracing::{debug, info, warn};
 
 /// Bound address of one ingest listener; per-transport.
@@ -63,7 +91,10 @@ struct BoundIngestListener {
 pub struct Node {
     ingest: Vec<BoundIngestListener>,
     api_listener: tokio::net::TcpListener,
-    pipeline: Arc<NodePipeline>,
+    /// Application service from `timing-core`. Owns the event log,
+    /// crossing engine, and sequence gate; implements the
+    /// `EventQueryPort` the API layer depends on.
+    service: Arc<EventIngestService>,
     metrics: Arc<Metrics>,
     /// Hot-reloadable auth state. The API router reads through this on
     /// every request; the producer-side authoriser reads through it on
@@ -232,14 +263,25 @@ impl Node {
         // Done BEFORE wrapping the log in a Mutex and BEFORE spawning any
         // listener so the seed completes uncontended and is fully visible
         // by the time the first connection is accepted.
-        let gate = Arc::new(crate::sequence_gate::SequenceGate::new());
-        let mut log_boxed: Box<dyn port_out_event_log::EventLog> = Box::new(log);
-        crate::sequence_gate::seed_from_log_box(&gate, &mut log_boxed).await?;
+        let gate = Arc::new(SequenceGate::new());
+        let mut log_boxed: Box<dyn timing_core::ports::outbound::EventLog> = Box::new(log);
+        seed_from_log_box(&gate, &mut log_boxed).await?;
 
-        let pipeline = Arc::new(NodePipeline::new(
+        // Convert the concrete metrics struct into the timing-core
+        // outbound port. `EventIngestService` only knows about
+        // `IngestMetrics`; this clone-then-coerce is the composition
+        // root's single point of dependency on the Prometheus-text-
+        // format implementation. The `Arc::clone(&metrics)` produces an
+        // `Arc<Metrics>` first; the explicit `let` binding is the
+        // coercion site that unsizes it to `Arc<dyn IngestMetrics>`
+        // (the same dance as the `Arc<dyn EventQueryPort>` coercion
+        // below).
+        let metrics_for_service: Arc<dyn IngestMetrics> = metrics.clone();
+        let service = Arc::new(EventIngestService::new(
             log_boxed,
-            Arc::clone(&metrics),
+            ProcessorConfig::default(),
             Arc::clone(&gate),
+            metrics_for_service,
         ));
 
         // Hold on to a copy of the parsed config so the hot-reload
@@ -249,7 +291,7 @@ impl Node {
         Ok(Self {
             ingest,
             api_listener,
-            pipeline,
+            service,
             metrics,
             auth,
             allowed_origins: config.api.allowed_origins,
@@ -555,7 +597,7 @@ impl Node {
         let Node {
             ingest,
             api_listener,
-            pipeline,
+            service,
             metrics,
             auth,
             allowed_origins,
@@ -578,21 +620,21 @@ impl Node {
             "otk-node starting"
         );
 
-        // Use a typed `let` binding to drive the `Arc<NodePipeline>` ->
-        // `Arc<dyn EventQueryPort>` conversion via Rust's unsized-coercion
-        // rules rather than an `as` cast. Functionally equivalent here
-        // (the `as` form does happen to compile via the same coercion),
-        // but the explicit binding makes the trait-object conversion
-        // visible to the reader and keeps it on the standard,
-        // statically-checked coercion path.
+        // Use a typed `let` binding to drive the `Arc<EventIngestService>`
+        // -> `Arc<dyn EventQueryPort>` conversion via Rust's unsized-
+        // coercion rules rather than an `as` cast. Functionally
+        // equivalent here (the `as` form does happen to compile via the
+        // same coercion), but the explicit binding makes the trait-
+        // object conversion visible to the reader and keeps it on the
+        // standard, statically-checked coercion path.
         //
-        // Note: `Arc::clone(&pipeline)` directly into `Arc<dyn ...>` does
+        // Note: `Arc::clone(&service)` directly into `Arc<dyn ...>` does
         // NOT compile because turbofish-style cloning fixes the type as
-        // `Arc<NodePipeline>` before any coercion site sees it. Going
-        // via `pipeline.clone()` works because the let-binding is the
-        // coercion site and the right-hand side is just an `Arc<NodePipeline>`
-        // that the binding converts.
-        let query: Arc<dyn EventQueryPort> = pipeline.clone();
+        // `Arc<EventIngestService>` before any coercion site sees it.
+        // Going via `service.clone()` works because the let-binding is
+        // the coercion site and the right-hand side is just an
+        // `Arc<EventIngestService>` that the binding converts.
+        let query: Arc<dyn EventQueryPort> = service.clone();
         let api_state = AppState {
             node_id: Arc::<str>::from(node_id.as_str()),
             query,
@@ -624,13 +666,13 @@ impl Node {
         let mut ingest_tasks: Vec<_> = ingest
             .into_iter()
             .map(|listener| {
-                let pipeline = Arc::clone(&pipeline);
+                let service = Arc::clone(&service);
                 let metrics = Arc::clone(&metrics);
                 let shutdown_rx = shutdown_rx.clone();
                 let id = listener.id.clone();
                 tokio::spawn(async move {
                     info!(listener_id = %id, addr = %listener.addr, "ingest listener spawned");
-                    run_listener(listener.port, id, pipeline, metrics, shutdown_rx).await;
+                    run_listener(listener.port, id, service, metrics, shutdown_rx).await;
                 })
             })
             .collect();

@@ -32,6 +32,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::RwLock;
 
+use timing_core::IngestMetrics;
+
 /// All runtime metrics, shared via `Arc<Metrics>`.
 #[derive(Default)]
 pub struct Metrics {
@@ -81,6 +83,29 @@ impl Metrics {
             "Total ingest sessions accepted per listener since start.",
         );
         out
+    }
+}
+
+/// Adapt the concrete `Metrics` struct to the `timing-core` outbound port.
+///
+/// `EventIngestService` only knows about [`IngestMetrics`]; the composition
+/// root holds an `Arc<Metrics>` and converts it to `Arc<dyn IngestMetrics>`
+/// at the wiring site so the service depends on the port, not on this
+/// crate's concrete counters.
+impl IngestMetrics for Metrics {
+    fn record_event_appended(&self, producer_id: &str, event_kind: &str) {
+        self.events_appended
+            .incr(&[("producer_id", producer_id), ("event_kind", event_kind)]);
+    }
+
+    fn record_duplicate_dropped(&self, producer_id: &str, detector_id: &str) {
+        self.events_dropped_duplicates
+            .incr(&[("producer_id", producer_id), ("detector_id", detector_id)]);
+    }
+
+    fn record_sequence_gap(&self, producer_id: &str, detector_id: &str) {
+        self.sequence_gaps
+            .incr(&[("producer_id", producer_id), ("detector_id", detector_id)]);
     }
 }
 

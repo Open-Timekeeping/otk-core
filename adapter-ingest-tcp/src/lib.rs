@@ -1,6 +1,6 @@
 //! TCP ingest adapter for OTK.
 //!
-//! Implements `port-in-ingest` over plain TCP. This crate is intentionally
+//! Implements `timing_core::ports::inbound` over plain TCP. This crate is intentionally
 //! thin: it owns TCP socket lifecycle, accept loop, and per-session byte I/O,
 //! and delegates every protocol concern upward.
 //!

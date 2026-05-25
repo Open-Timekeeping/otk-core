@@ -9,7 +9,11 @@ description = "Open Timekeeping conformance suite: verifies implementations agai
 event-model        = { workspace = true, features = ["serde"] }
 otk-protocol       = { workspace = true }
 otk-contracts      = { workspace = true }
-port-out-event-log = { workspace = true }
+# Conformance reaches into `timing_core::ports::outbound` for the
+# `EventLog` trait and its supporting types. Like the adapter crates,
+# conformance never touches `timing_core::domain::*` or
+# `timing_core::services::*` (see this crate's clippy.toml fence).
+timing-core        = { workspace = true }
 frame-codec        = { workspace = true }
 ingest-protocol    = { workspace = true }
 async-trait        = { workspace = true }

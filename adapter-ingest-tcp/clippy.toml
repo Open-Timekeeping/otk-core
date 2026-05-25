@@ -1,0 +1,27 @@
+# Hexagonal boundary fence (M12).
+#
+# This crate is an adapter. It implements one of `timing-core`'s outbound
+# port traits (`EventLog`) and must touch nothing else in `timing-core`.
+# When the port traits lived in their own crate (`port-out-event-log`),
+# Cargo's dep graph enforced the boundary at compile time. Folding the
+# ports into `timing-core` made the dep graph permissive again, so this
+# file is the convention-enforced replacement.
+#
+# `cargo clippy -- -D warnings` (run in CI) turns a violation into a build
+# failure. The lints are deny-by-default for `disallowed-types`; the
+# `-D warnings` flag promotes that to a hard error.
+#
+# The list is enumerated rather than wildcarded because clippy's
+# `disallowed-types` config takes exact paths, not globs. When a new
+# public type is added to `timing_core::domain` or `timing_core::services`,
+# add its path here too.
+disallowed-types = [
+    { path = "timing_core::Crossing",            reason = "domain entity; adapters use `timing_core::ports::*`" },
+    { path = "timing_core::CrossingId",          reason = "domain entity; adapters use `timing_core::ports::*`" },
+    { path = "timing_core::CrossingProcessor",   reason = "domain engine; adapters use `timing_core::ports::*`" },
+    { path = "timing_core::SequenceGate",        reason = "domain policy; adapters use `timing_core::ports::*`" },
+    { path = "timing_core::GateDecision",        reason = "domain enum; adapters use `timing_core::ports::*`" },
+    { path = "timing_core::ProcessorConfig",     reason = "domain config; adapters use `timing_core::ports::*`" },
+    { path = "timing_core::EventIngestService",  reason = "application service; adapters use `timing_core::ports::*`" },
+    { path = "timing_core::AppendOutcome",       reason = "application service; adapters use `timing_core::ports::*`" },
+]

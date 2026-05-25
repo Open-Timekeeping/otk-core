@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use event_model::{Detection, SensorData, SubjectId, TimingPointId};
 
-use crate::config::ProcessorConfig;
-use crate::crossing::{Crossing, CrossingId};
+use super::crossing::{Crossing, CrossingId};
+use super::processor_config::ProcessorConfig;
 
 type GroupKey = (TimingPointId, SubjectId);
 

@@ -10,7 +10,7 @@ use event_model::{
     Detection, DetectionId, DetectorId, OtkEvent, SensorData, SourceAttestation, TimebaseId,
     TimestampingMethod, TimingPointId,
 };
-use port_out_event_log::{EventLog, Offset};
+use timing_core::ports::outbound::{EventLog, Offset};
 
 fn det(seq: u64) -> OtkEvent {
     OtkEvent::Detection(Detection {
@@ -58,7 +58,7 @@ async fn append_empty_rejected_as_invalid_input() {
         .expect_err("empty append must error");
     assert!(matches!(
         err,
-        port_out_event_log::StorageError::InvalidInput(_)
+        timing_core::ports::outbound::StorageError::InvalidInput(_)
     ));
 }
 
@@ -91,7 +91,7 @@ async fn append_rejects_empty_producer_id() {
         .expect_err("empty producer_id must error");
     assert!(matches!(
         err,
-        port_out_event_log::StorageError::InvalidInput(_)
+        timing_core::ports::outbound::StorageError::InvalidInput(_)
     ));
 }
 

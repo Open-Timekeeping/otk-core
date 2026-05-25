@@ -12,8 +12,8 @@ An implementation that claims **Open Timekeeping compatibility** must:
 
    - For a **detector adapter** or **timebase**: the trait in [`otk-contracts`](../otk-contracts) (`DetectorAdapter` / `Timebase`).
    - For a **producer** talking to a runtime node across a process boundary: the OTK Protocol stack ([`event-model`](../event-model), [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec)) over at least one supported transport binding. Producers may use [`otk-sdk`](../otk-sdk)'s `producer` feature, or build directly on the stack.
-   - For a **transport-binding ingest adapter**: the [`port-in-ingest`](../port-in-ingest) trait. Server-side framing and handshake are reusable via [`frame-codec`](../frame-codec) + [`ingest-protocol`](../ingest-protocol); concrete adapters consume both.
-   - For a **storage backend**: the [`port-out-event-log`](../port-out-event-log) trait.
+   - For a **transport-binding ingest adapter**: the [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) trait in `timing_core::ports::inbound`. Server-side framing and handshake are reusable via [`frame-codec`](../frame-codec) + [`ingest-protocol`](../ingest-protocol); concrete adapters consume both.
+   - For a **storage backend**: the [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) trait in `timing_core::ports::outbound`.
    - For a **runtime-node plugin**: `plugin-api`. (Not yet specified; see [`open-questions.md`](open-questions.md).)
 
 2. Produce or consume canonical events as defined in [`event-model`](../event-model).
@@ -55,7 +55,7 @@ The protocol stack is verified layer by layer:
 - **Event Model.** Every emitted event matches its `event-model` schema and carries the required provenance blocks.
 - **Wire Protocol envelopes.** Versioning, content-type, sender id, sequence numbers, ack/error message types conform to the protocol spec.
 - **Frame Codec.** Encode/decode round-trips. Stream framing handles partial reads, message boundaries, and oversize messages. Resynchronizable framing (e.g., COBS, SLIP) recovers cleanly after corruption on byte-stream transports.
-- **Transport Binding.** Each binding's listener/client lifecycle, reconnect semantics, and error reporting match the [`port-in-ingest`](../port-in-ingest) contract. Bindings are tested independently of higher layers.
+- **Transport Binding.** Each binding's listener/client lifecycle, reconnect semantics, and error reporting match the [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) contract in `timing_core::ports::inbound`. Bindings are tested independently of higher layers.
 - **Compatibility.** Producer and consumer can negotiate compatible protocol versions across any supported binding; mismatches fail clearly, not silently.
 
 ### Storage backend

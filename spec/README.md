@@ -24,7 +24,7 @@ A correct implementation of any Open Timekeeping role is one that can be describ
 - Frame encode/decode and framing format, including the `no_std` + `alloc` path used by firmware (→ [`frame-codec`](../frame-codec)).
 - Transport-binding-specific code (→ per-transport adapter crates: [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket), and future serial / USB-CDC / RS-485 / etc.).
 - Concrete event/schema definitions (→ [`event-model`](../event-model)).
-- Trait signatures, function names, or other implementation API surface (→ the respective contract crate: [`otk-contracts`](../otk-contracts), [`port-in-ingest`](../port-in-ingest), [`port-out-event-log`](../port-out-event-log), [`ingest-protocol`](../ingest-protocol)).
+- Trait signatures, function names, or other implementation API surface (→ the respective contract crate: [`otk-contracts`](../otk-contracts), [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) in `timing_core::ports::inbound`, [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) in `timing_core::ports::outbound`, [`ingest-protocol`](../ingest-protocol)).
 - Runtime configuration, deployment guides, or operational runbooks (→ [`timing-node`](../timing-node) and apps).
 - Vendor-specific protocol details (→ vendor-specific adapter crates, if and when they exist).
 

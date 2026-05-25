@@ -16,19 +16,12 @@ It cares that incoming data becomes canonical detector events on the wire.
 
 ## Running
 
-```sh
-# With built-in defaults (binds 0.0.0.0:8463, stores to ./data/)
-cargo run --bin otk-node
-
-# With a config file
-cargo run --bin otk-node -- --config otk-node.toml
-```
-
-Logging level is controlled by the `RUST_LOG` environment variable:
-
-```sh
-RUST_LOG=debug cargo run --bin otk-node
-```
+End-to-end demo flows (plain TCP, TLS, mTLS) are documented at the
+workspace root: see the [Getting started](../README.md#getting-started)
+section of the top-level [README](../README.md). This page is the
+reference for what the node's TOML config actually accepts. Logging
+level is controlled by the `RUST_LOG` environment variable
+(`RUST_LOG=debug` for verbose output).
 
 ## Configuration
 
@@ -113,50 +106,20 @@ client_ca   = "/etc/otk/client-ca.pem"  # optional: enables mTLS
 | `private_key` | — | Path to a PEM file holding the server's private key (PKCS#8, RSA, or SEC1). Required when the `tls` block is present. |
 | `client_ca` | unset | Optional path to a PEM file of trusted client-cert CAs. When set, the listener enforces mutual TLS: clients without a cert chained to this CA are rejected at the TLS handshake. When unset, clients authenticate via the application-layer shared-secret token in `auth.producer_tokens`. |
 
-### Generating dev cert material
+### Bringing your own certs
 
-The easiest path: use the bundled [`otk-devcerts`](../otk-devcerts)
-generator. One command emits a working server CA + leaf and a client
-CA + leaf with the right two-tier structure rustls expects.
-
-The two shipped sample configs ([`timing-node/node-tls.toml`](./node-tls.toml)
-and [`producer-simulated/sim-start-tls.toml`](../producer-simulated/sim-start-tls.toml))
-expect their PEM material under `./dev-certs/` **relative to the
-working directory the process was started from**. From the workspace
-root, the full TLS demo is three commands:
-
-```sh
-# 1. Emit the cert bundle into ./dev-certs/ (run once per machine;
-#    re-run to rotate).
-cargo run -p otk-devcerts -- --out ./dev-certs
-
-# 2. Start the mTLS-enabled node.
-cargo run -p timing-node --bin otk-node -- --config timing-node/node-tls.toml
-
-# 3. In another terminal, start a producer that presents a client cert.
-cargo run -p producer-simulated --bin otk-simulator -- \
-    --config producer-simulated/sim-start-tls.toml
-```
-
-The two sample TOMLs reference matching PEM paths (`./dev-certs/server-chain.pem`,
-`./dev-certs/server-ca.pem`, `./dev-certs/client-ca.pem`,
-`./dev-certs/client-cert.pem`, `./dev-certs/client-key.pem`) and a
-matching SNI (`server_name = "localhost"`, matching `otk-devcerts`'s
-default leaf SAN of `DNS:localhost,IP:127.0.0.1,IP:::1`). If you
-ran `otk-devcerts` with non-default `--server-cn` or `--server-san`,
-update the sample's `server_name` accordingly.
+For TLS / mTLS demo flows that drive both sides of the wire from the
+shipped sample configs, use the bundled [`otk-devcerts`](../otk-devcerts)
+generator (covered in the [workspace-root README](../README.md#getting-started)).
 
 If you prefer to bring your own certs (openssl, step-ca, your
-organisation's PKI, etc.), the requirements are: PEM-encoded leaf +
-chain in `cert_chain`, PEM-encoded private key in `private_key`,
-optional PEM bundle of trusted client CAs in `client_ca` (for mTLS).
-A self-signed leaf will fail handshake with `CaUsedAsEndEntity`;
-rustls needs a real two-tier root → leaf shape.
-
-Producers using `otk-sdk` with the `producer-tls` feature connect via
-`Transport::Tls { addr, config: TlsClientConfig { ... } }`. See
-[`producer-simulated/sim-start-tls.toml`](../producer-simulated/sim-start-tls.toml)
-for the complete client-side TOML schema.
+organisation's PKI, etc.), the requirements on the node side are:
+PEM-encoded leaf + chain in `cert_chain`, PEM-encoded private key in
+`private_key`, optional PEM bundle of trusted client CAs in `client_ca`
+(for mTLS). A self-signed leaf will fail handshake with
+`CaUsedAsEndEntity`; rustls needs a real two-tier root → leaf shape.
+The producer-side client TLS config schema lives in
+[`producer-simulated/sim-start-tls.toml`](../producer-simulated/sim-start-tls.toml).
 
 `transport = "unix-socket"` (Unix targets only; configs containing this
 variant parse cleanly on Windows but `Node::new` fails the build at
@@ -267,14 +230,14 @@ which listener accepted the connection.
 - The `otk-node` binary entry point and lifecycle.
 - Ingest pipeline for canonical events (multi-listener; future in-process plugin path).
 - Listener configuration loading and supervision.
-- Event log integration (via the [`port-out-event-log`](../port-out-event-log) trait, backed at v0 by [`adapter-event-log-segment`](../adapter-event-log-segment)).
+- Event log integration (via the [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) in `timing_core::ports::outbound` trait, backed at v0 by [`adapter-event-log-segment`](../adapter-event-log-segment)).
 - Timing-domain orchestration (via [`timing-core`](../timing-core)).
 - Configuration loading, signal handling, and graceful shutdown.
 
 ## What does not belong here
 
 - OTK Protocol layer definitions: [`event-model`](../event-model), [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec).
-- The transport-binding ingest port trait: [`port-in-ingest`](../port-in-ingest). Implemented by the per-transport adapter crates.
+- The transport-binding ingest port trait: [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) in `timing_core::ports::inbound`. Implemented by the per-transport adapter crates.
 - The detector-adapter / timebase trait contracts: [`otk-contracts`](../otk-contracts).
 - Specific detector adapter implementations: `adapter-ingest-*` crates ([`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket)).
 - Timing-domain logic: [`timing-core`](../timing-core).
@@ -283,7 +246,7 @@ which listener accepted the connection.
 
 ## Dependencies
 
-**Depends on:** [`event-model`](../event-model), [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec), [`ingest-protocol`](../ingest-protocol), [`port-in-ingest`](../port-in-ingest), [`port-out-event-log`](../port-out-event-log), [`timing-core`](../timing-core), [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket) (cfg(unix)), [`adapter-event-log-segment`](../adapter-event-log-segment).
+**Depends on:** [`event-model`](../event-model), [`otk-protocol`](../otk-protocol), [`frame-codec`](../frame-codec), [`ingest-protocol`](../ingest-protocol), [`EventIngestPort`](../timing-core/src/ports/inbound/ingest.rs) in `timing_core::ports::inbound`, [`EventLog`](../timing-core/src/ports/outbound/event_log.rs) in `timing_core::ports::outbound`, [`timing-core`](../timing-core), [`adapter-ingest-tcp`](../adapter-ingest-tcp), [`adapter-ingest-unix-socket`](../adapter-ingest-unix-socket) (cfg(unix)), [`adapter-event-log-segment`](../adapter-event-log-segment).
 
 **Commonly depended on by:** runtime end-users via the `otk-node` binary. No other workspace crate depends on `timing-node`; it sits at the top of the dependency graph as the composition root.
 

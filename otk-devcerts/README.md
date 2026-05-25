@@ -23,43 +23,25 @@ binary that always emits the right shape is less rope.
 
 ## Usage
 
+End-to-end demo flows that combine `otk-devcerts` with `otk-node` and
+`otk-simulator` live at the workspace root: see the
+[Getting started](../README.md#getting-started) section of the top-level
+[README](../README.md). This page covers the generator's own flags and
+its output shape.
+
 ```bash
-# Default: server SANs = DNS:localhost,IP:127.0.0.1,IP:::1; 30-day validity
+# Default: server SANs = DNS:localhost,IP:127.0.0.1,IP:::1; 30-day validity.
+# Matches the shipped `node-tls.toml` / `sim-start-tls.toml` out of the box.
 cargo run -p otk-devcerts -- --out ./dev-certs
 
-# Or with custom hostnames for a non-loopback dev deployment
+# Custom hostnames for a non-loopback dev deployment. Remember to update
+# the producer's `[tls] server_name` (in sim-start-tls.toml) to match
+# one of the SANs you pass here.
 cargo run -p otk-devcerts -- \
     --out ./dev-certs \
     --server-san DNS:otk-node.lan,IP:192.168.1.50 \
     --server-cn otk-node.lan \
     --days 90
-```
-
-After running, the printed output tells you which paths to wire into
-your `timing-node` and `otk-simulator` configs. Concretely:
-
-```toml
-# timing-node config (otk-node.toml)
-[[listeners]]
-transport = "tcp"
-id = "tls-main"
-bind_addr = "127.0.0.1:8463"
-
-[listeners.tls]
-cert_chain  = "./dev-certs/server-chain.pem"
-private_key = "./dev-certs/server-key.pem"
-client_ca   = "./dev-certs/client-ca.pem"  # optional, enables mTLS
-
-# producer-simulated config (sim-start-tls.toml)
-node_addr   = "127.0.0.1:8463"
-producer_id = "sim-start"
-# ... usual sim fields ...
-
-[tls]
-trust_roots = "./dev-certs/server-ca.pem"
-server_name = "localhost"             # matches the server SAN
-client_cert = "./dev-certs/client-cert.pem"  # both = mTLS, both omitted = server-only
-client_key  = "./dev-certs/client-key.pem"
 ```
 
 ## Output

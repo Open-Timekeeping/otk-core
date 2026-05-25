@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use port_out_event_log::RetentionPolicy;
+use timing_core::ports::outbound::RetentionPolicy;
 
 /// Configuration for a [`SegmentLog`](crate::SegmentLog) instance.
 #[derive(Debug, Clone)]

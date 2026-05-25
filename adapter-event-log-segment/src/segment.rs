@@ -2,7 +2,7 @@ use std::io::SeekFrom;
 use std::path::Path;
 
 use event_model::OtkEvent;
-use port_out_event_log::{LogEntry, Offset, StorageError};
+use timing_core::ports::outbound::{LogEntry, Offset, StorageError};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 

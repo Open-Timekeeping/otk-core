@@ -17,7 +17,7 @@
 //!
 //! Frame encoding (length-prefixing, writing bytes to a link) is the concern of `adapter-ingest-tcp`
 //! (server side) and `embedded-wire` (firmware side). Transport binding (sockets, serial, USB) is
-//! the concern of `port-in-ingest` and its adapter implementations (`adapter-ingest-tcp`, etc.).
+//! the concern of `timing_core::ports::inbound` and its adapter implementations (`adapter-ingest-tcp`, etc.).
 //!
 //! # Protocol version
 //!

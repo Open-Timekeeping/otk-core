@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use ingest_protocol::{AllowAll, ConnectAuthoriser};
-use port_in_ingest::{EventIngestPort, IngestError, IngestSession};
+use timing_core::ports::inbound::{EventIngestPort, IngestError, IngestSession};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::time::timeout;
 

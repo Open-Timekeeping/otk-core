@@ -8,7 +8,7 @@ use ingest_protocol::{
     InboundAction, PostHandshakeProcessor, ProtocolError,
 };
 use otk_protocol::OtkEnvelope;
-use port_in_ingest::{IncomingEvent, IngestError, IngestSession};
+use timing_core::ports::inbound::{IncomingEvent, IngestError, IngestSession};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::config::TcpIngestConfig;
@@ -208,8 +208,8 @@ mod tests {
     use otk_protocol::{
         ids::ProducerId, Connect, ConnectRejectReason, MessageType, OtkEnvelope, PROTOCOL_VERSION,
     };
-    use port_in_ingest::{EventIngestPort, IngestError};
     use std::sync::Arc;
+    use timing_core::ports::inbound::{EventIngestPort, IngestError};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
 

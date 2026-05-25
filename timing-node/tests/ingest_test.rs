@@ -8,7 +8,7 @@ use event_model::{
 use otk_protocol::{
     ids::ProducerId, Connect, ConnectAck, MessageType, OtkEnvelope, PROTOCOL_VERSION,
 };
-use port_out_event_log::{EventLog, Offset};
+use timing_core::ports::outbound::{EventLog, Offset};
 use timing_node::{ListenerConfig, Node, NodeConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

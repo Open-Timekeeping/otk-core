@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use event_model::OtkEvent;
-use port_out_event_log::{
+use timing_core::ports::outbound::{
     EventLog, LogEntry, LogSubscription, Offset, RetentionPolicy, StorageError,
 };
 use tokio::fs::{File, OpenOptions};
@@ -43,7 +43,7 @@ struct ActiveSegment {
 
 // ── SegmentLog ────────────────────────────────────────────────────────────────
 
-/// Segment-file event log. The v0 implementation of [`port_out_event_log::EventLog`].
+/// Segment-file event log. The v0 implementation of [`timing_core::ports::outbound::EventLog`].
 ///
 /// Open with [`SegmentLog::open`]. Wrap in a `Mutex` if shared across tasks.
 pub struct SegmentLog {

@@ -13,10 +13,10 @@ use axum::{
 };
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use timing_core::ports::inbound::{EventPage, EventQueryPort, QueryError};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::metrics::Metrics;
-use crate::ports::{EventPage, EventQueryPort, QueryError};
 
 /// State shared with every request handler and middleware.
 ///
