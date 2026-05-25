@@ -6,28 +6,8 @@
 //! `MemLog` does, or it isn't an `EventLog`.
 
 use conformance::mem_log::MemLog;
-use event_model::{
-    Detection, DetectionId, DetectorId, OtkEvent, SensorData, SourceAttestation, TimebaseId,
-    TimestampingMethod, TimingPointId,
-};
+use conformance_fixtures::events::beam_break_event as det;
 use timing_core::ports::outbound::{EventLog, Offset};
-
-fn det(seq: u64) -> OtkEvent {
-    OtkEvent::Detection(Detection {
-        detection_id: DetectionId::new(format!("det-{seq}")),
-        detector_id: DetectorId::new("loop-1"),
-        timing_point_id: TimingPointId::new("tp-start"),
-        subject_id: None,
-        detected_at_ns: 1_700_000_000_000_000_000 + seq * 1_000_000_000,
-        detected_at_uncertainty_ns: None,
-        received_at_ns: None,
-        timestamping_method: TimestampingMethod::HardwareEventCapture,
-        timebase_id: TimebaseId::new("gps-1"),
-        source_attestation: SourceAttestation::RuntimeDiscovered,
-        sequence_number: seq,
-        sensor: SensorData::BeamBreak,
-    })
-}
 
 #[tokio::test]
 async fn append_single_returns_offset_zero() {

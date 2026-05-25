@@ -16,28 +16,8 @@
 //! (`adapter-event-log-segment`) honours the same contract via segment deletion.
 
 use conformance::mem_log::MemLog;
-use event_model::{
-    Detection, DetectionId, DetectorId, OtkEvent, SensorData, SourceAttestation, TimebaseId,
-    TimestampingMethod, TimingPointId,
-};
+use conformance_fixtures::events::beam_break_event as det;
 use timing_core::ports::outbound::{EventLog, Offset, StorageError};
-
-fn det(seq: u64) -> OtkEvent {
-    OtkEvent::Detection(Detection {
-        detection_id: DetectionId::new(format!("d-{seq}")),
-        detector_id: DetectorId::new("loop-1"),
-        timing_point_id: TimingPointId::new("tp"),
-        subject_id: None,
-        detected_at_ns: 1_000_000_000 + seq * 1_000_000,
-        detected_at_uncertainty_ns: None,
-        received_at_ns: None,
-        timestamping_method: TimestampingMethod::HardwareEventCapture,
-        timebase_id: TimebaseId::new("tb"),
-        source_attestation: SourceAttestation::RuntimeDiscovered,
-        sequence_number: seq,
-        sensor: SensorData::BeamBreak,
-    })
-}
 
 async fn populated_log(n: u64) -> MemLog {
     let mut log = MemLog::new();

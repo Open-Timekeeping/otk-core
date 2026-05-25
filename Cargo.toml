@@ -14,6 +14,7 @@ members  = [
     "producer-simulated",
     "timing-node",
     "conformance",
+    "conformance-fixtures",
 ]
 resolver = "2"
 
@@ -86,6 +87,7 @@ rcgen              = "0.13"
 adapter-event-log-segment  = { path = "adapter-event-log-segment" }
 adapter-ingest-tcp         = { path = "adapter-ingest-tcp" }
 adapter-ingest-unix-socket = { path = "adapter-ingest-unix-socket" }
+conformance-fixtures       = { path = "conformance-fixtures" }
 event-model                = { path = "event-model" }
 frame-codec                = { path = "frame-codec" }
 ingest-protocol            = { path = "ingest-protocol" }

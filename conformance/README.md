@@ -32,12 +32,12 @@ The suite is anchored on an in-crate [`MemLog`](./src/mem_log.rs) reference `Eve
 
 ## What does not belong here
 
-- Sample event streams and bad/edge-case streams. Future home: [`conformance-fixtures`](../conformance-fixtures).
+- Sample event streams, envelope builders, and per-variant canonical examples. Those live in [`conformance-fixtures`](../conformance-fixtures); this crate consumes them.
 - Implementations of any contract. This crate is the suite, not the device under test.
 
 ## Dependencies
 
-**Depends on:** [`spec`](../spec) (normative), and the this workspace member crates `event-model`, `otk-protocol`, `timing_core::ports::outbound`, `frame-codec`, `ingest-protocol`, `otk-contracts`. By design, this crate does **not** depend on any concrete adapter implementation (`adapter-ingest-tcp`, `adapter-event-log-segment`, etc.) so adding or removing adapters can't perturb the harness.
+**Depends on:** [`spec`](../spec) (normative); the workspace member crates `event-model`, `otk-protocol`, `timing-core` (for `ports::outbound::*` only, fenced by `clippy.toml`), `frame-codec`, `ingest-protocol`, `otk-contracts`; and [`conformance-fixtures`](../conformance-fixtures) for the shared corpus. By design, this crate does **not** depend on any concrete adapter implementation (`adapter-ingest-tcp`, `adapter-event-log-segment`, etc.) so adding or removing adapters can't perturb the harness.
 
 **Commonly depended on by:** every adapter, every timebase, every storage backend, [`timing-node`](../timing-node), reference firmware, third-party implementations.
 
