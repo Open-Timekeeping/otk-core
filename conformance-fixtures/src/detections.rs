@@ -46,18 +46,26 @@ pub fn beam_break_at_loop(seq: u64) -> Detection {
     }
 }
 
-/// Loop-transponder detection with a known subject (bib number) and
-/// RSSI value. Use for tests that exercise peak-signal selection,
-/// subject grouping, or RSSI-driven crossing semantics.
+/// Loop-style RFID read with a known subject and RSSI value. Use for
+/// tests that exercise peak-signal selection, subject grouping, or
+/// RSSI-driven crossing semantics.
 ///
-/// Detector "loop-1" at timing point "tp-start"; subject "bib-N" for
-/// the given `bib`. Timestamp derived as for [`beam_break_at_loop`].
-pub fn loop_transponder_with_rssi(seq: u64, bib: u32, rssi_dbm: i16) -> Detection {
+/// `SensorData::LoopTransponder` is the OTK variant name regardless of
+/// whether the underlying hardware is an active transponder (typical in
+/// motorsport) or a passive RFID tag (typical in running and similar
+/// foot races). Both report a subject identifier and, often, an RSSI
+/// value; the fixture stays domain-neutral on `subject` so the same
+/// constructor seeds either kind of test.
+///
+/// Detector "loop-1" at timing point "tp-start"; subject "subject-N"
+/// for the given `subject`. Timestamp derived as for
+/// [`beam_break_at_loop`].
+pub fn loop_read_with_rssi(seq: u64, subject: u32, rssi_dbm: i16) -> Detection {
     Detection {
         detection_id: DetectionId::new(format!("det-{seq}")),
         detector_id: DetectorId::new("loop-1"),
         timing_point_id: TimingPointId::new("tp-start"),
-        subject_id: Some(SubjectId::new(format!("bib-{bib}"))),
+        subject_id: Some(SubjectId::new(format!("subject-{subject}"))),
         detected_at_ns: FIXTURE_BASE_NS + seq * 1_000_000_000,
         detected_at_uncertainty_ns: Some(50_000),
         received_at_ns: None,
@@ -86,9 +94,9 @@ mod tests {
     }
 
     #[test]
-    fn loop_transponder_carries_subject_and_rssi() {
-        let d = loop_transponder_with_rssi(7, 42, -55);
-        assert_eq!(d.subject_id.as_ref().unwrap().as_str(), "bib-42");
+    fn loop_read_carries_subject_and_rssi() {
+        let d = loop_read_with_rssi(7, 42, -55);
+        assert_eq!(d.subject_id.as_ref().unwrap().as_str(), "subject-42");
         match d.sensor {
             SensorData::LoopTransponder {
                 rssi_dbm: Some(r), ..

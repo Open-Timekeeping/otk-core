@@ -3,15 +3,15 @@
 //! Two flavours:
 //!
 //! - Wrapping helpers ([`as_detection_event`], [`beam_break_event`],
-//!   [`loop_transponder_event`]) for the common path of "build a
-//!   detection, wrap it in `OtkEvent`."
+//!   [`loop_read_event`]) for the common path of "build a detection,
+//!   wrap it in `OtkEvent`."
 //! - [`canon`]: one canonical example per [`OtkEvent`] variant, used by
 //!   round-trip / encode-decode tests that need exhaustiveness over
 //!   the event-model surface.
 
 use event_model::{Detection, OtkEvent};
 
-use crate::detections::{beam_break_at_loop, loop_transponder_with_rssi};
+use crate::detections::{beam_break_at_loop, loop_read_with_rssi};
 
 /// Wrap a [`Detection`] in [`OtkEvent::Detection`].
 pub fn as_detection_event(d: Detection) -> OtkEvent {
@@ -24,11 +24,11 @@ pub fn beam_break_event(seq: u64) -> OtkEvent {
     as_detection_event(beam_break_at_loop(seq))
 }
 
-/// Convenience: build a loop-transponder detection via
-/// [`loop_transponder_with_rssi`] and wrap it in
-/// [`OtkEvent::Detection`].
-pub fn loop_transponder_event(seq: u64, bib: u32, rssi_dbm: i16) -> OtkEvent {
-    as_detection_event(loop_transponder_with_rssi(seq, bib, rssi_dbm))
+/// Convenience: build a loop-style RFID read via [`loop_read_with_rssi`]
+/// and wrap it in [`OtkEvent::Detection`]. See
+/// [`loop_read_with_rssi`] for the active-vs-passive domain note.
+pub fn loop_read_event(seq: u64, subject: u32, rssi_dbm: i16) -> OtkEvent {
+    as_detection_event(loop_read_with_rssi(seq, subject, rssi_dbm))
 }
 
 /// One canonical example per [`OtkEvent`] variant.
@@ -54,7 +54,7 @@ pub mod canon {
             detection_id: DetectionId::new("det-1"),
             detector_id: DetectorId::new("loop-1"),
             timing_point_id: TimingPointId::new("tp-start"),
-            subject_id: Some(SubjectId::new("bib-42")),
+            subject_id: Some(SubjectId::new("subject-1")),
             detected_at_ns: 1_700_000_000_000_000_000,
             detected_at_uncertainty_ns: Some(50_000),
             received_at_ns: Some(1_700_000_000_000_000_100),
@@ -164,7 +164,7 @@ pub mod canon {
         OtkEvent::Crossing(CrossingEvent {
             crossing_id: CrossingId::new("c-1"),
             timing_point_id: TimingPointId::new("tp-start"),
-            subject_id: Some(SubjectId::new("bib-42")),
+            subject_id: Some(SubjectId::new("subject-1")),
             crossed_at_ns: 1_700_000_000_000_000_000,
             crossed_at_uncertainty_ns: Some(100),
             timebase_id: TimebaseId::new("gps-1"),

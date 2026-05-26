@@ -23,7 +23,7 @@ item is a constructor (`fn` or `const`) returning an `event-model` or
 ```
 src/
 ├── lib.rs           crate-root re-exports
-├── detections.rs    `Detection` constructors (beam_break_at_loop, loop_transponder_with_rssi)
+├── detections.rs    `Detection` constructors (beam_break_at_loop, loop_read_with_rssi)
 ├── events.rs        `OtkEvent` wrappers + `canon::*` exhaustive samples (one per variant)
 ├── envelopes.rs     `OtkEnvelope` builders (connect, connect_with_token, data)
 └── streams.rs       multi-event scenarios (single_detector_happy_path, reconnect_with_replay)
