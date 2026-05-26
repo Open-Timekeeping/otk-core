@@ -132,6 +132,44 @@ The reference firmware toolkit (HAL, target-specific crates, native detector fir
 - **Reference hardware license.** Apache-2.0 covers the source files; final hardware-design license may shift to CERN-OHL-S or TAPR OHL.
 - **Loop / RF front-end design**, TBD with electrical-engineering review.
 
+## Downlink and telemetry
+
+Tracked at design-doc level in [downlink.md](downlink.md). The
+strawman recommends the bidirectional architecture sketched there;
+these decisions need to be made before any downlink code lands.
+
+### RF physical layer (blocks any downlink hardware)
+
+- **Band.** Sub-GHz (868/915 MHz ISM), 2.4 GHz proprietary, 2.4 GHz BLE, or venue-licensed custom narrowband.
+- **Modulation and data rate.** Sets the over-the-air time budget per message and the link budget in marginal-signal cases.
+- **Module family.** Once band + modulation are fixed, the off-the-shelf radio module list narrows.
+
+### Protocol shape
+
+- **One stack vs two.** The strawman recommends a single OTK Protocol with shared upper layers (Event Model, Wire Protocol, Frame Codec) and per-direction transport bindings, plus a new `target_id` field on the envelope for downlink addressing. Confirm or revise.
+- **`target_id` vs collapsing into a single `peer_id`.** Two fields make uplink-vs-downlink intent visible without inspecting `message_type`; one field is simpler. Trade is small.
+
+### Addressing and identity
+
+- **Subject id shape on downlink.** Reuse the uplink `SubjectId` as the receiver address, or carry a separate hardware-rooted `ReceiverId` with a runtime-maintained mapping?
+- **Broadcast id.** Pick a well-known sentinel value for venue-broadcast directives.
+
+### Authentication and trust
+
+- **Per-message signing.** Venue-is-the-trust-boundary suffices for v1, or sign payloads with a symmetric MAC keyed per event?
+- **Privacy.** Per-driver unicast in the clear by default, or encrypted for serious motorsport categories?
+
+### Message vocabulary
+
+- **v1 payloads.** Minimum viable set: last-lap time, gap to ahead, gap to behind, flag state, position. Confirm or expand.
+- **Subject-to-fabric direction.** Out of scope for downlink.md (which is fabric-to-subject only). Driver acknowledgements / driver-initiated commands need their own design pass if/when in scope.
+
+### CAN map specifics
+
+- **CAN identifier range.** Pick a block (motorsport convention puts customer telemetry in `0x600`–`0x6FF`; OTK could claim a sub-range).
+- **CAN-FD or classical only.** Classical CAN 2.0B is the universal subset; CAN-FD optional for messages that don't fit 8 bytes.
+- **Per-vendor configuration files.** Ship `.aim` / `.mtc` / `.stack` config artifacts in this workspace, or in a sibling `otk-can-configs` repo.
+
 ---
 
 ## Resolution discipline

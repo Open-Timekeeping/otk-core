@@ -2,7 +2,7 @@
 
 Conceptual model of Open Timekeeping. Implementation-neutral.
 
-For terminology, see [glossary.md](glossary.md). For deployment shapes, see [topologies.md](topologies.md). For what conformance means, see [compatibility.md](compatibility.md).
+For terminology, see [glossary.md](glossary.md). For deployment shapes, see [topologies.md](topologies.md). For what conformance means, see [compatibility.md](compatibility.md). For the bidirectional / downlink architecture (fabric-to-subject telemetry, CAN-out to in-vehicle dashboards), see [downlink.md](downlink.md).
 
 ---
 
@@ -53,11 +53,12 @@ Timing Runtime Node
 Apps, APIs, external consumers
 ```
 
-Three things to note:
+Four things to note:
 
 - The runtime node does not care **where** an adapter lives, only that incoming data is canonical Open Timekeeping events.
 - Timebase is a first-class peer of detector adapters, not a private implementation detail of detector adapters.
 - Storage is a port. So are each of the protocol layers below. So is the plugin API. Open Timekeeping is built around explicit boundaries.
+- The path above is the **uplink** direction (subject to fabric). A symmetric **downlink** direction (fabric to subject: per-driver gap info, race state, telemetry to the vehicle dash via CAN-out) is part of OTK's full-stack scope. Downlink and uplink are independent capabilities a device advertises; basic transponders ship uplink-only, pro transponders ship both. See [downlink.md](downlink.md) for the bidirectional architecture.
 
 ---
 

@@ -146,3 +146,25 @@ The disciplined state of a timebase: `locked`, `holdover`, `free-run`, `unsynchr
 
 **Compatibility**
 A claim that an implementation conforms to the contracts in this spec, demonstrated by passing the [`conformance`](../conformance) suite.
+
+---
+
+## Downlink terminology
+
+**Uplink**
+The subject-to-fabric direction: detector / adapter / producer sends canonical events to a runtime node. This is the data path documented in [architecture.md § The data path](architecture.md). Every OTK deployment has uplink; this is what timing-fabric ingest means.
+
+**Downlink**
+The fabric-to-subject direction: the runtime node sends directives (per-driver telemetry, race state, configuration) back to the subject of the timing. Distinct from uplink in both content (directives vs. observations) and transport (typically RF from venue transmitters to in-vehicle receivers). Downlink is an opt-in capability per device; see [downlink.md](downlink.md).
+
+**Telemetry Transmitter**
+The venue-side device that drives the downlink RF link. Typically co-located with a decoder loop, but physically and electrically independent of the loop antenna; uses its own radio. Implements the `TelemetryTransmitter` outbound port from [`timing-core`](../timing-core).
+
+**Telemetry Receiver**
+The subject-side device that consumes downlink directives. In motorsport this is typically the active transponder with a sub-GHz receive radio added; the receiver then bridges the data onto the vehicle CAN bus per the OTK CAN Map.
+
+**Downlink directive**
+A canonical Open Timekeeping event that travels fabric-to-subject. Per-subject directives (gap to ahead, last lap time, position) are addressed to one receiver; venue directives (flag state, leader gap) are broadcast to every receiver in the deployment.
+
+**OTK CAN Map**
+The normative byte-level specification for how downlink directives are emitted onto a vehicle CAN bus. Lets any CAN-connected dashboard (AIM, MoTeC, Stack, OEM motorsport dash, custom) be configured to display OTK telemetry alongside its existing data. See [downlink.md § OTK CAN Map](downlink.md).
