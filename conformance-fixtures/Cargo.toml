@@ -1,0 +1,11 @@
+[package]
+name        = "conformance-fixtures"
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+description = "Canonical test inputs for the Open Timekeeping conformance suite. Data-only: Detection / OtkEvent / OtkEnvelope constructors and small replay streams that any implementation can exercise against."
+
+[dependencies]
+event-model  = { workspace = true, features = ["serde"] }
+otk-protocol = { workspace = true }
+minicbor     = { workspace = true, features = ["derive", "alloc"] }

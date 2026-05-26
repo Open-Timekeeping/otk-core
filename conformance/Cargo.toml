@@ -6,16 +6,20 @@ license     = "Apache-2.0"
 description = "Open Timekeeping conformance suite: verifies implementations against the canonical contracts."
 
 [dependencies]
-event-model        = { workspace = true, features = ["serde"] }
-otk-protocol       = { workspace = true }
-otk-contracts      = { workspace = true }
+event-model          = { workspace = true, features = ["serde"] }
+otk-protocol         = { workspace = true }
+otk-contracts        = { workspace = true }
 # Conformance reaches into `timing_core::ports::outbound` for the
 # `EventLog` trait and its supporting types. Like the adapter crates,
 # conformance never touches `timing_core::domain::*` or
 # `timing_core::services::*` (see this crate's clippy.toml fence).
-timing-core        = { workspace = true }
-frame-codec        = { workspace = true }
-ingest-protocol    = { workspace = true }
+timing-core          = { workspace = true }
+# Shared corpus of canonical events, envelopes, and replay streams.
+# Sibling crate so non-Rust consumers (firmware, future TS SDK) can
+# port the fixtures without inheriting this crate's harness deps.
+conformance-fixtures = { workspace = true }
+frame-codec          = { workspace = true }
+ingest-protocol      = { workspace = true }
 async-trait        = { workspace = true }
 minicbor           = { workspace = true, features = ["alloc"] }
 tokio              = { workspace = true, features = ["sync"] }

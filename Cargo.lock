@@ -234,6 +234,7 @@ name = "conformance"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "conformance-fixtures",
  "event-model",
  "frame-codec",
  "ingest-protocol",
@@ -242,6 +243,15 @@ dependencies = [
  "otk-protocol",
  "timing-core",
  "tokio",
+]
+
+[[package]]
+name = "conformance-fixtures"
+version = "0.1.0"
+dependencies = [
+ "event-model",
+ "minicbor",
+ "otk-protocol",
 ]
 
 [[package]]

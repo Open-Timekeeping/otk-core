@@ -4,74 +4,47 @@
 //! `ingest-protocol` relies on: the handshake outcomes a server can produce,
 //! and the processor's dispatch into [`InboundAction`] variants.
 
-use event_model::{
-    Detection, DetectionId, DetectorId, OtkEvent, SensorData, SourceAttestation, TimebaseId,
-    TimestampingMethod, TimingPointId,
-};
+use conformance_fixtures::envelopes;
+use conformance_fixtures::events::beam_break_event;
+use event_model::OtkEvent;
 use ingest_protocol::{
     perform_server_handshake, perform_server_handshake_with_auth, ConnectAuthoriser,
     HandshakeOutcome, InboundAction, PostHandshakeProcessor, ProtocolError,
 };
 use otk_protocol::{
-    ids::ProducerId, Connect, ConnectRejectReason, MessageType, OtkEnvelope, PROTOCOL_VERSION,
+    ids::ProducerId, ConnectRejectReason, MessageType, OtkEnvelope, PROTOCOL_VERSION,
 };
 
+/// Convenience wrapper around [`envelopes::connect`] that keeps the
+/// `(min, max, producer)` argument order this file already used, so
+/// the test bodies don't have to reshuffle.
 fn connect_envelope(min: u8, max: u8, producer: &str) -> OtkEnvelope {
-    connect_envelope_with_token(min, max, producer, None)
+    envelopes::connect(producer, min, max)
 }
 
+/// Same shape as [`connect_envelope`] but threads an optional auth
+/// token through to either [`envelopes::connect`] or
+/// [`envelopes::connect_with_token`].
 fn connect_envelope_with_token(
     min: u8,
     max: u8,
     producer: &str,
     token: Option<&str>,
 ) -> OtkEnvelope {
-    let connect = Connect {
-        protocol_version_min: min,
-        protocol_version_max: max,
-        streams: vec![],
-        auth_token: token.map(|s| s.to_string()),
-    };
-    OtkEnvelope {
-        protocol_version: max,
-        message_type: MessageType::Connect,
-        source_id: ProducerId::from(producer),
-        stream_id: None,
-        sequence_number: None,
-        correlation_id: None,
-        payload: Some(minicbor::to_vec(&connect).unwrap()),
-        traceparent: None,
+    match token {
+        None => envelopes::connect(producer, min, max),
+        Some(t) => envelopes::connect_with_token(producer, min, max, t),
     }
 }
 
 fn data_envelope(mt: MessageType, payload: Option<Vec<u8>>, producer: &str) -> OtkEnvelope {
-    OtkEnvelope {
-        protocol_version: PROTOCOL_VERSION,
-        message_type: mt,
-        source_id: ProducerId::from(producer),
-        stream_id: None,
-        sequence_number: None,
-        correlation_id: None,
-        payload,
-        traceparent: None,
-    }
+    envelopes::data(producer, mt, payload)
 }
 
 fn test_event() -> OtkEvent {
-    OtkEvent::Detection(Detection {
-        detection_id: DetectionId::new("det-1"),
-        detector_id: DetectorId::new("d-1"),
-        timing_point_id: TimingPointId::new("tp-1"),
-        subject_id: None,
-        detected_at_ns: 1,
-        detected_at_uncertainty_ns: None,
-        received_at_ns: None,
-        timestamping_method: TimestampingMethod::HardwareEventCapture,
-        timebase_id: TimebaseId::new("tb-1"),
-        source_attestation: SourceAttestation::RuntimeDiscovered,
-        sequence_number: 1,
-        sensor: SensorData::BeamBreak,
-    })
+    // sequence 1 keeps the previous fixture's value; identifiers
+    // come from `conformance_fixtures::detections::beam_break_at_loop`.
+    beam_break_event(1)
 }
 
 #[test]

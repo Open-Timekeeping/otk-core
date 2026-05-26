@@ -33,7 +33,8 @@ open-timekeeping/
 ├── timing-node/                Timing Runtime Node and composition root (binary: otk-node)
 │
 │   Conformance
-└── conformance/                Test suite verifying implementations against the contracts
+├── conformance/                Test suite verifying implementations against the contracts
+└── conformance-fixtures/       Shared canonical test inputs (events, envelopes, replay streams)
 ```
 
 ## Getting started
