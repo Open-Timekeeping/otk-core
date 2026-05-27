@@ -125,12 +125,71 @@ The reference firmware toolkit (HAL, target-specific crates, native detector fir
 
 ## First-class adapters
 
-- **Which adapters are first-class beyond what's stubbed now**: serial / USB-CDC ingest, manual-entry, CSV replay. Vendor-specific adapters (MYLAPS, RaceResult, etc.) are explicitly **out of scope** at this stage and may never be appropriate depending on protocol, licensing, and access constraints.
+- **Which adapters are first-class beyond what's stubbed now**: serial / USB-CDC ingest, manual-entry, CSV replay. Vendor-specific adapters for proprietary chip-timing ecosystems are explicitly **out of scope** at this stage and may never be appropriate depending on protocol, licensing, and access constraints.
 
 ## Hardware
 
 - **Reference hardware license.** Apache-2.0 covers the source files; final hardware-design license may shift to CERN-OHL-S or TAPR OHL.
-- **Loop / RF front-end design**, TBD with electrical-engineering review.
+- **Loop / RF front-end design**, TBD with electrical-engineering review. See "Downlink and standings" below for the LF-uplink and 2.4-GHz-downlink physical-layer questions that bound this.
+
+## Downlink and standings
+
+Strawman architecture in [downlink.md](downlink.md). The architectural shape (three-application model, edge-computed gap on the decoder, server pushes standings only) is locked there; the items below need separate decision calls before downlink code or firmware lands.
+
+### LF uplink physical-layer details
+
+The frequency is settled at ~125 kHz per industry practice (near-field magnetic induction; regulatory path is trivial at these frequencies). Open:
+
+- **Loop geometry.** Rectangular coax loop, but dimensions for the canonical OTK reference (motorsport-scale) and the bench-scale Stage-2A loop need to be settled.
+- **Conductor gauge** (RG-58 vs RG-213 vs others), midpoint **termination resistor** value, **tuning capacitor** sizing.
+- **Depth-below-surface** for permanent track installs; surface-laid alternative for portable.
+
+### 2.4 GHz downlink PHY choice
+
+Settled at 2.4 GHz (established motorsport practice; global ISM band; latency budget fits). Open:
+
+- **PHY**: BLE 5 Coded PHY (LE Long Range, 125 kbps, ~1.5 ms packet), IEEE 802.15.4, Nordic ESB, or a custom proprietary stack on the same radio.
+- **Channel-hopping discipline** for multipath mitigation near concrete grandstands and pit walls.
+
+### Addressing scheme
+
+- **Subject id on the downlink.** Reuse the uplink `SubjectId` as the downlink receiver address, or carry a separate hardware-rooted `ReceiverId` with a runtime-maintained mapping?
+- **Broadcast id.** Pick a well-known sentinel for venue-broadcast directives (if/when v1 vocabulary grows beyond unicast).
+
+### Authentication and trust
+
+- **Per-message signing on the downlink.** A motivated attacker with the right radio can spoof a downlink transmitter and feed false gap data to a transponder. For v1, venue-is-the-trust-boundary may suffice; for later versions, sign payloads with a symmetric MAC keyed per session.
+- **Privacy.** Per-driver unicast in the clear by default, or encrypted for serious motorsport categories where competitive intelligence matters?
+
+### v1 message vocabulary
+
+- **What payloads ship in v1.** Minimum viable: `StandingsUpdate { ranking: Vec<(SubjectId, lap_count)> }` server→decoder; `DownlinkDirective { gap_to_ahead, gap_to_behind, last_lap_time, position }` decoder→transponder. Confirm and lock the field set.
+- **Sport-specific extension mechanism shape.** Namespacing, discovery, versioning. Not in v1 vocabulary; the design hook needs to exist in the v1 wire shape so extensions can land later without breaking compatibility.
+
+### Multi-pass collision handling
+
+In pack racing 5–10 transponders cross one loop within ~50 ms. Both directions need to handle this:
+
+- **Uplink**: how does the LF inductive protocol disambiguate overlapping continuous broadcasts? Per-transponder pseudo-random TX slots, narrowband channelisation, CDMA-style codes?
+- **Downlink**: after a pack crossing, the decoder owes 5–10 unicast directives to 5–10 specific transponders within a few hundred ms. How does the framing handle this?
+
+### Decoder receive-chain design
+
+- **ADC sampling rate and peak-detection filter design** for the LF receive chain on the decoder. This is the genuinely hard-real-time work. (A Cortex-M7 in software handles the gap computation in microseconds, so there is no "hardware vs firmware" question for the gap math; it lives in firmware. The real design call is the receive-chain sampling.)
+
+### In-vehicle electrical envelope
+
+- **EMI envelope per ISO 7637-2 / ISO 11452** for the transponder's automotive-grade design (load-dump, jump-start, alternator transients).
+- **Antenna polarisation mismatch budget.** Chassis orientation is unpredictable. Circularly-polarised antennas on the decoder, or 6 dB margin in the link budget?
+
+### Multi-loop installation discipline
+
+- **Ground-loop discipline.** Multiple inductive loops at one venue, all bonded to a shared safety ground via decoder boxes, can form unintended large-area loops picking up 50/60 Hz mains hum or transient noise. Single-point-grounding practice needs to be documented as deployment guidance.
+- **GPS-disciplined oscillator on each decoder** for cross-decoder time consistency.
+
+### Transponder UX
+
+- **Low-battery UX via CAN.** When and how does the transponder warn the dashboard that its battery is getting low? CAN message map question; flagged here so it doesn't get lost when `spec/can-map.md` is drafted.
 
 ---
 

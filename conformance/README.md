@@ -28,7 +28,7 @@ The suite is anchored on an in-crate [`MemLog`](./src/mem_log.rs) reference `Eve
 
 - **Runtime-node ingest end-to-end** (multi-listener parity over real TCP + Unix sockets concurrently, producer-side resume after reconnect, consumer-side `retention_expired` over the live API). Lands once the conformance crate gains a fixture-driven driver that can stand up a `timing-node` instance.
 - **Hardware-in-the-loop.** How the suite drives physical detectors is tracked in [`spec/open-questions.md`](../spec/open-questions.md).
-- **Vendor-specific test packs** (MYLAPS, RaceResult, etc.). Out of scope at the v0 contract level.
+- **Vendor-specific test packs** for proprietary chip-timing ecosystems. Out of scope at the v0 contract level.
 
 ## What does not belong here
 

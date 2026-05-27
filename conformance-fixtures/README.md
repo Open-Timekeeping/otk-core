@@ -40,8 +40,8 @@ variant gives every round-trip test free coverage.
 - Implementation code. Fixtures are data; impls go in adapter crates
   or `timing-core`.
 - Vendor / venue-specific scenarios. The corpus stays general-purpose
-  at the contract level; vendor packs (MYLAPS, RaceResult, etc.) are
-  out of scope.
+  at the contract level; vendor packs for proprietary chip-timing
+  ecosystems are out of scope.
 
 ## Why a separate crate
 

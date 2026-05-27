@@ -12,8 +12,9 @@ A correct implementation of any Open Timekeeping role is one that can be describ
 
 ## What belongs here
 
-- Terminology and glossary (detection, hit, crossing, timing point, detector, transponder, entrant, timebase, OTK Protocol layers, etc.).
+- Terminology and glossary (detection, hit, crossing, timing point, detector, transponder, entrant, timebase, OTK Protocol layers, downlink, standings, etc.).
 - Conceptual architecture (the Timing Fabric, runtime nodes, detector adapters, timebase, producers, the four OTK Protocol layers).
+- Bidirectional / downlink architecture (fabric-to-decoder standings push, decoder-to-transponder instant downlink, in-vehicle CAN-out, asymmetric device capabilities, decoder and transponder firmwares as first-class applications). See [downlink.md](downlink.md).
 - Networking and deployment topologies (native detector producer speaking OTK directly, edge gateway, hub plugin, same-host adapters over Unix socket, per-stack node, central hub with multiple ingest listeners).
 - Compatibility and conformance overview (what it means to be Open Timekeeping compatible).
 - Cross-cutting principles (honest provenance, immutability, mechanism vs policy, domain neutrality, transport-independent protocol).
