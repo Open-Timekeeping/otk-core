@@ -33,7 +33,7 @@
 //!   `timing-node` instance.
 //! - **Hardware-in-the-loop**: how the suite drives physical detectors is
 //!   tracked in [`open-questions.md`].
-//! - **Vendor-specific test packs** (MYLAPS, RaceResult, etc.). Out of
+//! - **Vendor-specific test packs** for proprietary chip-timing ecosystems. Out of
 //!   scope at the v0 contract level.
 //!
 //! [`spec/`]: https://github.com/Open-Timekeeping/open-timekeeping/tree/main/spec

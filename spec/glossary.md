@@ -146,3 +146,43 @@ The disciplined state of a timebase: `locked`, `holdover`, `free-run`, `unsynchr
 
 **Compatibility**
 A claim that an implementation conforms to the contracts in this spec, demonstrated by passing the [`conformance`](../conformance) suite.
+
+---
+
+## Downlink and standings terminology
+
+**Uplink**
+The subject-to-fabric direction: detector / adapter / producer sends canonical events to a runtime node. This is the data path documented in [architecture.md § The data path](architecture.md). Every OTK deployment has uplink; this is what timing-fabric ingest means.
+
+**Downlink**
+The fabric-to-subject direction: the decoder at a timing loop transmits a per-crossing directive back to the just-crossed transponder, the instant the crossing is detected. Distinct from uplink in both content (per-crossing timing data: gap to ahead, gap to behind, last lap, position) and transport (typically 2.4 GHz RF over a separate radio from the loop's LF inductive uplink). Downlink is an opt-in capability per device; see [downlink.md](downlink.md).
+
+**Standings**
+The current order of subjects in a session, paired with each subject's lap count. The thing the runtime node distributes to decoders so they can compute gaps locally on every crossing. Standings change rarely (only when an overtake or a completed lap shifts the order); the push is low-frequency and latency-tolerant. NOT to be confused with "race state," which would include flag, safety car, pit window, and other race-control content; standings are timing-derived only.
+
+**Standings push**
+The server-to-decoder message family that distributes the current standings. Carried by `StandingsUpdate` messages over the OTK Protocol envelope. Low frequency, eventually consistent.
+
+**Downlink directive**
+A single decoder-to-transponder message addressed to one transponder, carrying the per-crossing timing data computed locally by the decoder. Format: `DownlinkDirective { gap_to_ahead, gap_to_behind, last_lap_time, position }`. Computed and transmitted within milliseconds of the physical passage.
+
+**StandingsPublisher**
+The outbound port in `timing_core::ports::outbound` that the server-side `StandingsService` emits standings updates through. Adapter implementations target whatever transport reaches the decoders.
+
+**StandingsReceiver**
+The inbound port on the decoder firmware application that consumes standings pushes from the server. Updates the decoder's local standings cache.
+
+**DownlinkTransmitter**
+The outbound port on the decoder firmware application that emits `DownlinkDirective` messages over the downlink RF link. Adapter implementations target the chosen 2.4 GHz radio.
+
+**DownlinkReceiver**
+The inbound port on the transponder firmware application that consumes downlink directives. Hands them to the configured output binding.
+
+**OutputBinding**
+The outbound port on the transponder firmware application that bridges downlink directives to the vehicle's in-device output. The canonical implementation is `CanOutBinding` (per the deferred `spec/can-map.md`); alternative implementations include BLE, USB, and on-device display.
+
+**Decoder application**
+The first-class application that runs on each timing loop's decoder hardware. Hosts inbound ports (loop-crossing capture, standings receive), outbound ports (uplink to server, instant downlink to transponder), local state (standings cache, crossing-time cache), and real application logic (gap computation on every crossing). Not a dumb sensor.
+
+**Transponder application**
+The first-class application that runs on each transponder. Hosts an inbound port (downlink receive) and one or more outbound ports (output bindings to the vehicle). Modest application logic (decode directive, format for chosen binding). Not a dumb display.
